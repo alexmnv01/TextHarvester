@@ -56,6 +56,11 @@ public class MainApp extends Application {
         logArea.setEditable(false);
         logArea.setWrapText(true);
 
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        AtomicInteger processed = new AtomicInteger(0);
+        AtomicInteger saved = new AtomicInteger(0);
+        AtomicReference<String> currentUrl = new AtomicReference<>("");
+
         AppLogger.setUiSink(line -> Platform.runLater(() -> {
             logArea.appendText(line + System.lineSeparator());
             countLabel.setText("Processed: " + processed.get() + " | Saved: " + saved.get());
@@ -63,10 +68,6 @@ public class MainApp extends Application {
             currentLabel.setText(url == null || url.isBlank() ? "Current: -" : "Current: " + url);
         }));
 
-        AtomicBoolean cancelled = new AtomicBoolean(false);
-        AtomicInteger processed = new AtomicInteger(0);
-        AtomicInteger saved = new AtomicInteger(0);
-        AtomicReference<String> currentUrl = new AtomicReference<>("");
 
         AppLogger.setStatusSupplier(() -> {
             String url = currentUrl.get();
