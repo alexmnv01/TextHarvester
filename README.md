@@ -140,7 +140,7 @@ mvn javafx:run -Djavafx.sdk=C:\Development\javafx-sdk-21.0.10
 java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar ./text-harvester-0.1.0-SNAPSHOT-all.jar
 ```
 
-
+Если будут проблемы с парсингом
 Предлагаю изменить алгоритм обработки.
 1. Давай работать со страницей как с тестовым документом
 2. У нас есть четко определенное начало нужного фрагмента
