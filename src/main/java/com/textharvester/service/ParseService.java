@@ -203,6 +203,7 @@ public class ParseService {
     }
 
     private String extractTranscript(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+        AppLogger.info("Extracting transcript from: " + pageUrl);
         Document doc = connect(pageUrl, settings);
 
         Element h1 = doc.selectFirst("h1");
@@ -210,17 +211,21 @@ public class ParseService {
             AppLogger.warn("No h1 found on page: " + pageUrl);
             return null;
         }
+        AppLogger.info("Title (h1): " + normalize(h1.text()));
 
         Element contentRoot = findContentRoot(h1);
         List<LineItem> items = collectLineItemsAfterH1(contentRoot, h1);
         if (items.isEmpty()) {
+            AppLogger.warn("No content items after h1");
             return null;
         }
+        AppLogger.info("Content items collected: " + items.size());
 
         boolean afterMeta = false;
         boolean inTranscript = false;
         List<String> lines = new ArrayList<>();
         String lastLine = "";
+        boolean metaFound = false;
 
         for (LineItem item : items) {
             String text = normalize(item.getText());
@@ -233,15 +238,26 @@ public class ParseService {
 
             if (!afterMeta && isMetaLine(text)) {
                 afterMeta = true;
+                metaFound = true;
+                AppLogger.info("Meta line found: " + text);
                 continue;
             }
 
             if (!afterMeta) {
-                continue;
+                // fallback: relaxed meta detection
+                if (looksLikeMetaFallback(text)) {
+                    afterMeta = true;
+                    metaFound = true;
+                    AppLogger.info("Meta line (fallback) found: " + text);
+                }
+                if (!afterMeta) {
+                    continue;
+                }
             }
 
             if (isCommentAnchor(text) || isRecommendedLine(item, text)) {
                 if (inTranscript) {
+                    AppLogger.info("Stop by anchor: " + text);
                     break;
                 }
                 continue;
@@ -249,6 +265,7 @@ public class ParseService {
 
             if (item.isLinkOnly()) {
                 if (!inTranscript) {
+                    AppLogger.info("Skipping promo link: " + text);
                     continue;
                 }
             }
@@ -256,8 +273,10 @@ public class ParseService {
             if (!inTranscript) {
                 if (REPLY_PATTERN.matcher(text).find()) {
                     inTranscript = true;
+                    AppLogger.info("Transcript starts (reply pattern): " + text);
                 } else if (!item.isLinkOnly()) {
                     inTranscript = true;
+                    AppLogger.info("Transcript starts: " + text);
                 }
             }
 
@@ -269,6 +288,10 @@ public class ParseService {
             }
         }
 
+        if (!metaFound) {
+            AppLogger.warn("Meta line not found on page: " + pageUrl);
+        }
+        AppLogger.info("Transcript lines collected: " + lines.size());
         return String.join(System.lineSeparator(), lines).trim();
     }
 
@@ -333,6 +356,14 @@ public class ParseService {
         boolean hasTextLink = lower.contains("текст") || lower.contains("text");
         boolean hasTime = TIME_PATTERN.matcher(lower).find();
         return hasPipes && hasViews && hasTextLink && hasTime;
+    }
+
+    private boolean looksLikeMetaFallback(String text) {
+        String lower = text.toLowerCase();
+        boolean hasPipes = lower.contains("|");
+        boolean hasViews = lower.contains("просмотр") || lower.contains("views");
+        boolean hasTextLink = lower.contains("текст") || lower.contains("text");
+        return hasPipes && hasViews && hasTextLink;
     }
 
     private boolean isCommentAnchor(String text) {
