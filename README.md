@@ -137,5 +137,5 @@ mvn javafx:run -Djavafx.sdk=C:\Development\javafx-sdk-21.0.10
 
 Запуск jar с JavaFX SDK:
 ```bash
-java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar target/text-harvester-0.1.0-SNAPSHOT-all.jar
+java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar ./text-harvester-0.1.0-SNAPSHOT-all.jar
 ```
