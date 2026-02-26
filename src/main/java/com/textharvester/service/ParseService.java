@@ -510,7 +510,15 @@ public class ParseService {
             }
         }, body);
 
-        return String.join(System.lineSeparator(), lines).trim();
+        String joined = String.join(System.lineSeparator(), lines).trim();
+        if (countLines(joined) <= 1) {
+            String fallback = extractFromDlBodyHtml(body);
+            if (fallback != null && !fallback.isBlank()) {
+                AppLogger.info("DL-body fallback HTML extraction used");
+                return fallback;
+            }
+        }
+        return joined;
     }
 
     private int countLines(String text) {
@@ -518,6 +526,17 @@ public class ParseService {
             return 0;
         }
         return text.split("\\R", -1).length;
+    }
+
+    private String extractFromDlBodyHtml(Element body) {
+        String html = body.html();
+        int bIndex = html.toLowerCase().indexOf("<b>");
+        if (bIndex >= 0) {
+            html = html.substring(bIndex + 3);
+        }
+        html = html.replaceAll("(?i)<br\\s*/?>", "\n");
+        String text = Jsoup.parse(html).wholeText();
+        return text == null ? "" : text.trim();
     }
 
     private Element findListScope(Document doc) {
