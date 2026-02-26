@@ -512,7 +512,11 @@ public class ParseService {
         String withBreaks = html.replaceAll("(?i)<br\\s*/?>", "\n");
         String noTags = withBreaks.replaceAll("(?is)<[^>]+>", "");
         String unescaped = Parser.unescapeEntities(noTags, false);
-        return unescaped == null ? "" : unescaped.trim();
+        if (unescaped == null) {
+            return "";
+        }
+        String normalized = unescaped.replaceAll("\\n{3,}", "\n\n");
+        return normalized.trim();
     }
 
     private Element findListScope(Document doc) {
