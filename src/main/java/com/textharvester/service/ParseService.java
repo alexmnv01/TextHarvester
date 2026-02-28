@@ -222,6 +222,8 @@ public class ParseService {
                 return extracted;
             }
             AppLogger.warn("DL-body extraction empty, fallback to general parser");
+        } else {
+            AppLogger.warn("DL-body not found, fallback to general parser");
         }
 
         Element contentRoot = findContentRoot(h1);
@@ -488,39 +490,40 @@ public class ParseService {
 
     private String extractFromDlBody(Element body) {
         List<String> lines = new ArrayList<>();
-        boolean started = false;
-        for (Node node : body.childNodes()) {
-            if (node instanceof Element el) {
-                if ("br".equals(el.tagName())) {
-                    if (started) {
-                        lines.add("");
+        NodeTraversor.traverse(new NodeVisitor() {
+            boolean started = false;
+
+            @Override
+            public void head(Node node, int depth) {
+                if (node instanceof Element el) {
+                    String tag = el.tagName();
+                    if ("b".equals(tag) && !started) {
+                        started = true;
+                        return;
                     }
-                    continue;
-                }
-                if ("b".equals(el.tagName()) && !started) {
-                    started = true;
-                    continue;
-                }
-                if (!started) {
-                    continue;
-                }
-                String text = normalize(el.text());
-                if (!text.isEmpty()) {
-                    lines.add(text);
-                }
-                continue;
-            }
-            if (node instanceof TextNode tn) {
-                String text = normalize(tn.text());
-                if (text.isEmpty()) {
-                    continue;
+                    if ("br".equals(tag)) {
+                        if (started) {
+                            lines.add("");
+                        }
+                        return;
+                    }
                 }
                 if (!started) {
-                    started = true;
+                    return;
                 }
-                lines.add(text);
+                if (node instanceof TextNode tn) {
+                    String text = normalize(tn.text());
+                    if (!text.isEmpty()) {
+                        lines.add(text);
+                    }
+                }
             }
-        }
+
+            @Override
+            public void tail(Node node, int depth) {
+            }
+        }, body);
+
         return String.join(System.lineSeparator(), lines).trim();
     }
 
