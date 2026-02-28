@@ -226,6 +226,7 @@ public class ParseService {
         List<String> lines = new ArrayList<>();
         String lastLine = "";
         boolean metaFound = false;
+        int inspected = 0;
 
         for (LineItem item : items) {
             String text = normalize(item.getText());
@@ -234,6 +235,10 @@ public class ParseService {
                     lines.add("");
                 }
                 continue;
+            }
+
+            if (shouldLogCandidate(text, item)) {
+                AppLogger.info("Candidate line: " + text);
             }
 
             if (!afterMeta && isMetaLine(text)) {
@@ -272,6 +277,11 @@ public class ParseService {
 
             if (!inTranscript) {
                 if (REPLY_PATTERN.matcher(text).find()) {
+                    if (!metaFound) {
+                        AppLogger.info("Meta not found, using reply pattern to start transcript");
+                        afterMeta = true;
+                        metaFound = true;
+                    }
                     inTranscript = true;
                     AppLogger.info("Transcript starts (reply pattern): " + text);
                 } else if (!item.isLinkOnly()) {
@@ -286,6 +296,7 @@ public class ParseService {
                     lastLine = text;
                 }
             }
+            inspected++;
         }
 
         if (!metaFound) {
@@ -364,6 +375,17 @@ public class ParseService {
         boolean hasViews = lower.contains("просмотр") || lower.contains("views");
         boolean hasTextLink = lower.contains("текст") || lower.contains("text");
         return hasPipes && hasViews && hasTextLink;
+    }
+
+    private boolean shouldLogCandidate(String text, LineItem item) {
+        String lower = text.toLowerCase();
+        if (lower.contains("просмотр") || lower.contains("views") || lower.contains("текст") || lower.contains("|")) {
+            return true;
+        }
+        if (REPLY_PATTERN.matcher(text).find()) {
+            return true;
+        }
+        return item.isLinkOnly();
     }
 
     private boolean isCommentAnchor(String text) {
