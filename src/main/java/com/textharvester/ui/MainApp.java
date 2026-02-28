@@ -6,6 +6,7 @@ import com.textharvester.log.AppLogger;
 import com.textharvester.service.ParseService;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -16,9 +17,11 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainApp extends Application {
     private final ParseService parseService = new ParseService();
+    private Task<Void> currentTask;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -36,6 +39,13 @@ public class MainApp extends Application {
         pagesList.setPrefHeight(140);
 
         Button startButton = new Button("Start");
+        Button stopButton = new Button("Stop");
+        stopButton.setDisable(true);
+
+        Label statusLabel = new Label("Idle");
+        ProgressIndicator progress = new ProgressIndicator();
+        progress.setMaxSize(18, 18);
+        progress.setVisible(false);
 
         TextArea logArea = new TextArea();
         logArea.setEditable(false);
@@ -45,6 +55,8 @@ public class MainApp extends Application {
             logArea.appendText(line + System.lineSeparator());
         }));
 
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+
         startButton.setOnAction(evt -> {
             String mode = modeBox.getValue();
             AppLogger.info("Selected mode: " + mode);
@@ -52,18 +64,63 @@ public class MainApp extends Application {
                 AppLogger.warn("Mode not selected");
                 return;
             }
-            switch (mode) {
-                case "single" -> parseService.runSingle(config.getApp());
-                case "list" -> parseService.runList(config.getApp());
-                case "build-site-list" -> parseService.buildSiteList(config.getApp());
-                default -> AppLogger.warn("Unknown mode: " + mode);
+            if (currentTask != null && currentTask.isRunning()) {
+                AppLogger.warn("Task already running");
+                return;
             }
+            if (mode.equals("single") || mode.equals("build-site-list")) {
+                if (config.getApp().getSinglePageUrl() == null || config.getApp().getSinglePageUrl().isBlank()) {
+                    AppLogger.warn("singlePageUrl is empty in config");
+                    return;
+                }
+            }
+            if (mode.equals("list")) {
+                if (config.getApp().getListPageUrls() == null || config.getApp().getListPageUrls().isEmpty()) {
+                    AppLogger.warn("listPageUrls is empty in config");
+                    return;
+                }
+            }
+
+            cancelled.set(false);
+            startButton.setDisable(true);
+            stopButton.setDisable(false);
+            progress.setVisible(true);
+            statusLabel.setText("Running: " + mode);
+
+            currentTask = new Task<>() {
+                @Override
+                protected Void call() {
+                    switch (mode) {
+                        case "single" -> parseService.runSingle(config.getApp(), cancelled::get);
+                        case "list" -> parseService.runList(config.getApp(), cancelled::get);
+                        case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get);
+                        default -> AppLogger.warn("Unknown mode: " + mode);
+                    }
+                    return null;
+                }
+            };
+
+            currentTask.setOnSucceeded(e -> finishTask(statusLabel, progress, startButton, stopButton, "Finished"));
+            currentTask.setOnFailed(e -> finishTask(statusLabel, progress, startButton, stopButton, "Failed"));
+            currentTask.setOnCancelled(e -> finishTask(statusLabel, progress, startButton, stopButton, "Cancelled"));
+
+            new Thread(currentTask, "parser-worker").start();
         });
+
+        stopButton.setOnAction(evt -> {
+            cancelled.set(true);
+            if (currentTask != null) {
+                currentTask.cancel();
+            }
+            AppLogger.warn("Stop requested by user");
+        });
+
+        HBox controls = new HBox(10, startButton, stopButton, progress, statusLabel);
 
         VBox topBox = new VBox(10,
                 labeledRow("Mode:", modeBox),
                 labeledRow("Pages:", pagesList),
-                startButton
+                controls
         );
         topBox.setPadding(new Insets(10));
 
@@ -78,6 +135,15 @@ public class MainApp extends Application {
         stage.show();
 
         AppLogger.info("Config loaded from config.yaml");
+    }
+
+    private void finishTask(Label statusLabel, ProgressIndicator progress, Button startButton, Button stopButton, String status) {
+        Platform.runLater(() -> {
+            statusLabel.setText(status);
+            progress.setVisible(false);
+            startButton.setDisable(false);
+            stopButton.setDisable(true);
+        });
     }
 
     private HBox labeledRow(String label, Control control) {
