@@ -11,3 +11,4 @@ app:
   maxItems: 0
   userAgent: "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)"
   timeoutSeconds: 15
+  dryRun: false

@@ -144,7 +144,8 @@ public class ParseService {
     private List<LinkItem> collectLinksFromListPage(String pageUrl, AppConfig.AppSettings settings) throws IOException {
         Document doc = connect(pageUrl, settings);
 
-        Elements anchors = doc.select("a[href*=/video/view.php?t=]");
+        Element scope = findListScope(doc);
+        Elements anchors = scope.select("a[href*=/video/view.php?t=]");
         Map<String, LinkItem> unique = new LinkedHashMap<>();
         for (Element a : anchors) {
             String href = a.attr("href").trim();
@@ -280,6 +281,7 @@ public class ParseService {
                               AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems, AppConfig.AppSettings settings) {
         int limit = Math.max(0, maxItems);
         int processedLocal = 0;
+        boolean dryRun = settings != null && settings.isDryRun();
         for (LinkItem item : links) {
             if (isCancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                 AppLogger.warn("Processing cancelled");
@@ -300,10 +302,14 @@ public class ParseService {
                     processedLocal++;
                     continue;
                 }
-                Path outPath = writeTranscript(outputDir, item.getTitle(), transcript);
-                AppLogger.info("Saved: " + outPath);
-                if (saved != null) {
-                    saved.incrementAndGet();
+                if (dryRun) {
+                    AppLogger.info("Dry-run: skip save for " + item.getTitle());
+                } else {
+                    Path outPath = writeTranscript(outputDir, item.getTitle(), transcript);
+                    AppLogger.info("Saved: " + outPath);
+                    if (saved != null) {
+                        saved.incrementAndGet();
+                    }
                 }
             } catch (Exception e) {
                 AppLogger.error("Failed to process: " + item.getUrl(), e);
@@ -399,6 +405,20 @@ public class ParseService {
                 .userAgent(userAgent)
                 .timeout((int) timeout.toMillis())
                 .get();
+    }
+
+    private Element findListScope(Document doc) {
+        Elements candidates = doc.select(":has(a[href*=/video/view.php?t=])");
+        Element best = doc.body();
+        int bestCount = 0;
+        for (Element el : candidates) {
+            int count = el.select("a[href*=/video/view.php?t=]").size();
+            if (count > bestCount) {
+                best = el;
+                bestCount = count;
+            }
+        }
+        return best == null ? doc.body() : best;
     }
 
     private Element findContentRoot(Element h1) {

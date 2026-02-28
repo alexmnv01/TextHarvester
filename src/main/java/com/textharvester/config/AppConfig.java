@@ -18,5 +18,6 @@ public class AppConfig {
         private int maxItems;
         private String userAgent;
         private int timeoutSeconds;
+        private boolean dryRun;
     }
 }

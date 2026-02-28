@@ -35,6 +35,7 @@ app:
   maxItems: 0
   userAgent: "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)"
   timeoutSeconds: 15
+  dryRun: false
 ```
 
 ### Описание полей
@@ -46,6 +47,7 @@ app:
 - `maxItems` — лимит количества роликов для обработки. `0` = без ограничения.
 - `userAgent` — значение `User-Agent` для HTTP-запросов.
 - `timeoutSeconds` — таймаут HTTP-запросов в секундах.
+- `dryRun` — если `true`, файлы не сохраняются (только проверка извлечения).
 
 ## Режимы работы
 
