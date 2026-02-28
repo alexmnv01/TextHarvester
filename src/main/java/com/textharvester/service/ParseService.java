@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ParseService {
     private static final String USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
@@ -40,6 +42,11 @@ public class ParseService {
     }
 
     public void runSingle(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        runSingle(settings, isCancelled, null, null, null);
+    }
+
+    public void runSingle(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                          AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
         String pageUrl = settings.getSinglePageUrl();
         if (pageUrl == null || pageUrl.isBlank()) {
             AppLogger.warn("singlePageUrl is empty in config");
@@ -51,7 +58,7 @@ public class ParseService {
             List<LinkItem> links = collectLinksFromListPage(pageUrl);
             AppLogger.info("Collected links: " + links.size());
             if (!isCancelled.getAsBoolean()) {
-                processLinks(settings.getOutputDir(), links, isCancelled);
+                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl);
             }
         } catch (IOException e) {
             AppLogger.error("Failed to load list page: " + pageUrl, e);
@@ -63,6 +70,11 @@ public class ParseService {
     }
 
     public void runList(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        runList(settings, isCancelled, null, null, null);
+    }
+
+    public void runList(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                        AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
         List<String> pages = settings.getListPageUrls();
         if (pages == null || pages.isEmpty()) {
             AppLogger.warn("listPageUrls is empty in config");
@@ -91,7 +103,7 @@ public class ParseService {
         }
 
         AppLogger.info("Total unique links: " + unique.size());
-        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled);
+        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl);
     }
 
     public void buildSiteList(AppConfig.AppSettings settings) {
@@ -266,10 +278,18 @@ public class ParseService {
     }
 
     private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
+        processLinks(outputDir, links, isCancelled, null, null, null);
+    }
+
+    private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
+                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
         for (LinkItem item : links) {
             if (isCancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                 AppLogger.warn("Processing cancelled");
                 break;
+            }
+            if (currentUrl != null) {
+                currentUrl.set(item.getUrl());
             }
             AppLogger.info("Processing: " + item.getTitle() + " -> " + item.getUrl());
             try {
@@ -280,8 +300,15 @@ public class ParseService {
                 }
                 Path outPath = writeTranscript(outputDir, item.getTitle(), transcript);
                 AppLogger.info("Saved: " + outPath);
+                if (saved != null) {
+                    saved.incrementAndGet();
+                }
             } catch (Exception e) {
                 AppLogger.error("Failed to process: " + item.getUrl(), e);
+            } finally {
+                if (processed != null) {
+                    processed.incrementAndGet();
+                }
             }
         }
     }

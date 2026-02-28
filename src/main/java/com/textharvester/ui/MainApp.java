@@ -17,7 +17,9 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class MainApp extends Application {
     private final ParseService parseService = new ParseService();
@@ -47,15 +49,32 @@ public class MainApp extends Application {
         progress.setMaxSize(18, 18);
         progress.setVisible(false);
 
+        Label currentLabel = new Label("Current: -");
+        Label countLabel = new Label("Processed: 0 | Saved: 0");
+
         TextArea logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setWrapText(true);
 
         AppLogger.setUiSink(line -> Platform.runLater(() -> {
             logArea.appendText(line + System.lineSeparator());
+            countLabel.setText("Processed: " + processed.get() + " | Saved: " + saved.get());
+            String url = currentUrl.get();
+            currentLabel.setText(url == null || url.isBlank() ? "Current: -" : "Current: " + url);
         }));
 
         AtomicBoolean cancelled = new AtomicBoolean(false);
+        AtomicInteger processed = new AtomicInteger(0);
+        AtomicInteger saved = new AtomicInteger(0);
+        AtomicReference<String> currentUrl = new AtomicReference<>("");
+
+        AppLogger.setStatusSupplier(() -> {
+            String url = currentUrl.get();
+            if (url == null || url.isBlank()) {
+                return "";
+            }
+            return url;
+        });
 
         startButton.setOnAction(evt -> {
             String mode = modeBox.getValue();
@@ -82,17 +101,22 @@ public class MainApp extends Application {
             }
 
             cancelled.set(false);
+            processed.set(0);
+            saved.set(0);
+            currentUrl.set("");
             startButton.setDisable(true);
             stopButton.setDisable(false);
             progress.setVisible(true);
             statusLabel.setText("Running: " + mode);
+            countLabel.setText("Processed: 0 | Saved: 0");
+            currentLabel.setText("Current: -");
 
             currentTask = new Task<>() {
                 @Override
                 protected Void call() {
                     switch (mode) {
-                        case "single" -> parseService.runSingle(config.getApp(), cancelled::get);
-                        case "list" -> parseService.runList(config.getApp(), cancelled::get);
+                        case "single" -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
+                        case "list" -> parseService.runList(config.getApp(), cancelled::get, processed, saved, currentUrl);
                         case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get);
                         default -> AppLogger.warn("Unknown mode: " + mode);
                     }
@@ -116,11 +140,13 @@ public class MainApp extends Application {
         });
 
         HBox controls = new HBox(10, startButton, stopButton, progress, statusLabel);
+        VBox statusBox = new VBox(6, currentLabel, countLabel);
 
         VBox topBox = new VBox(10,
                 labeledRow("Mode:", modeBox),
                 labeledRow("Pages:", pagesList),
-                controls
+                controls,
+                statusBox
         );
         topBox.setPadding(new Insets(10));
 
