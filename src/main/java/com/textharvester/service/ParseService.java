@@ -213,6 +213,17 @@ public class ParseService {
         }
         AppLogger.info("Title (h1): " + normalize(h1.text()));
 
+        Element dlBody = findDlBody(doc);
+        if (dlBody != null) {
+            AppLogger.info("Using <dl>/<dd>/<div class=body> transcript extraction");
+            String extracted = extractFromDlBody(dlBody);
+            if (extracted != null && !extracted.isBlank()) {
+                AppLogger.info("Transcript lines collected: " + countLines(extracted));
+                return extracted;
+            }
+            AppLogger.warn("DL-body extraction empty, fallback to general parser");
+        }
+
         Element contentRoot = findContentRoot(h1);
         List<LineItem> items = collectLineItemsAfterH1(contentRoot, h1);
         if (items.isEmpty()) {
@@ -465,6 +476,59 @@ public class ParseService {
                 .userAgent(userAgent)
                 .timeout((int) timeout.toMillis())
                 .get();
+    }
+
+    private Element findDlBody(Document doc) {
+        Element dd = doc.selectFirst("dl dd div.body");
+        if (dd != null) {
+            return dd;
+        }
+        return null;
+    }
+
+    private String extractFromDlBody(Element body) {
+        List<String> lines = new ArrayList<>();
+        boolean started = false;
+        for (Node node : body.childNodes()) {
+            if (node instanceof Element el) {
+                if ("br".equals(el.tagName())) {
+                    if (started) {
+                        lines.add("");
+                    }
+                    continue;
+                }
+                if ("b".equals(el.tagName()) && !started) {
+                    started = true;
+                    continue;
+                }
+                if (!started) {
+                    continue;
+                }
+                String text = normalize(el.text());
+                if (!text.isEmpty()) {
+                    lines.add(text);
+                }
+                continue;
+            }
+            if (node instanceof TextNode tn) {
+                String text = normalize(tn.text());
+                if (text.isEmpty()) {
+                    continue;
+                }
+                if (!started) {
+                    started = true;
+                }
+                lines.add(text);
+            }
+        }
+        return String.join(System.lineSeparator(), lines).trim();
+    }
+
+    private int countLines(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        return text.split("\\R", -1).length;
     }
 
     private Element findListScope(Document doc) {
