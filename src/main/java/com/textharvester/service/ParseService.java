@@ -383,6 +383,9 @@ public class ParseService {
     private String sanitizeFileName(String name) {
         String cleaned = name.replaceAll("[\\\\/:*?\"<>|]", " ");
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
+        if (cleaned.length() > 255) {
+            cleaned = cleaned.substring(0, 255).trim();
+        }
         return cleaned;
     }
 
