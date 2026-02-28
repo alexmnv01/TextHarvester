@@ -127,3 +127,15 @@ mvn javafx:jlink-zip
 ```bash
 mvn javafx:run
 ```
+
+## Запуск с установленным JavaFX (Windows)
+Если JavaFX SDK установлен отдельно, укажите его путь:
+
+```bash
+mvn javafx:run -Djavafx.sdk=C:\Development\javafx-sdk-21.0.10
+```
+
+Запуск jar с JavaFX SDK:
+```bash
+java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar target/text-harvester-0.1.0-SNAPSHOT-all.jar
+```
