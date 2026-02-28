@@ -153,6 +153,9 @@ public class ParseService {
             if (href.isEmpty() || title.isEmpty()) {
                 continue;
             }
+            if (!looksLikeTitle(title)) {
+                continue;
+            }
             String absUrl = toAbsoluteUrl(pageUrl, href);
             unique.putIfAbsent(absUrl, new LinkItem(title, absUrl));
         }
@@ -298,7 +301,7 @@ public class ParseService {
             try {
                 String transcript = extractTranscript(item.getUrl(), settings);
                 if (transcript == null || transcript.isBlank()) {
-                    AppLogger.warn("Transcript not found: " + item.getUrl());
+                    AppLogger.warn("Transcript not found: " + item.getTitle() + " -> " + item.getUrl());
                     processedLocal++;
                     continue;
                 }
@@ -312,7 +315,7 @@ public class ParseService {
                     }
                 }
             } catch (Exception e) {
-                AppLogger.error("Failed to process: " + item.getUrl(), e);
+                AppLogger.error("Failed to process: " + item.getTitle() + " -> " + item.getUrl(), e);
             } finally {
                 if (processed != null) {
                     processed.incrementAndGet();
@@ -419,6 +422,17 @@ public class ParseService {
             }
         }
         return best == null ? doc.body() : best;
+    }
+
+    private boolean looksLikeTitle(String text) {
+        if (text.length() < 5) {
+            return false;
+        }
+        if (text.matches("\\d+")) {
+            return false;
+        }
+        String lower = text.toLowerCase();
+        return !lower.contains("страницы") && !lower.contains("pages");
     }
 
     private Element findContentRoot(Element h1) {
