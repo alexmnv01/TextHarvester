@@ -7,6 +7,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 import org.jsoup.select.NodeTraversor;
 import org.jsoup.select.NodeVisitor;
@@ -216,8 +217,8 @@ public class ParseService {
         }
 
         Element contentRoot = findContentRoot(h1);
-        List<Element> blocks = collectBlocksAfterH1(contentRoot, h1);
-        if (blocks.isEmpty()) {
+        List<LineItem> items = collectLineItemsAfterH1(contentRoot, h1);
+        if (items.isEmpty()) {
             return null;
         }
 
@@ -226,9 +227,12 @@ public class ParseService {
         List<String> lines = new ArrayList<>();
         String lastLine = "";
 
-        for (Element el : blocks) {
-            String text = normalize(el.wholeText());
+        for (LineItem item : items) {
+            String text = normalize(item.getText());
             if (text.isEmpty()) {
+                if (inTranscript) {
+                    lines.add("");
+                }
                 continue;
             }
 
@@ -241,14 +245,14 @@ public class ParseService {
                 continue;
             }
 
-            if (isCommentAnchor(el, text) || isRecommendedBlock(el, text)) {
+            if (isCommentAnchor(text) || isRecommendedLine(item, text)) {
                 if (inTranscript) {
                     break;
                 }
                 continue;
             }
 
-            if (isPromoLinkOnly(el, text)) {
+            if (item.isLinkOnly()) {
                 if (!inTranscript) {
                     continue;
                 }
@@ -257,7 +261,7 @@ public class ParseService {
             if (!inTranscript) {
                 if (REPLY_PATTERN.matcher(text).find()) {
                     inTranscript = true;
-                } else if (!isPromoLinkOnly(el, text)) {
+                } else if (!item.isLinkOnly()) {
                     inTranscript = true;
                 }
             }
@@ -322,36 +326,26 @@ public class ParseService {
         return hasPipes && hasViews && hasTextLink && hasTime;
     }
 
-    private boolean isCommentAnchor(Element el, String text) {
+    private boolean isCommentAnchor(String text) {
         String lower = text.toLowerCase();
-        String id = el.id().toLowerCase();
-        String classes = String.join(" ", el.classNames()).toLowerCase();
-        if (id.contains("comment") || classes.contains("comment") || id.contains("komment") || classes.contains("komment")) {
-            return true;
-        }
         return lower.contains("комментарии")
                 || lower.contains("отправлено")
                 || lower.contains("ответить")
                 || lower.contains("цитировать")
                 || lower.contains("страницы")
-                || lower.contains("cтраницы");
+                || lower.contains("cтраницы")
+                || lower.contains("в новостях");
     }
 
-    private boolean isRecommendedBlock(Element el, String text) {
-        if (text.toLowerCase().contains("просмотр") && el.select("img").size() > 0 && el.select("a").size() > 0) {
+    private boolean isRecommendedLine(LineItem item, String text) {
+        String lower = text.toLowerCase();
+        if (lower.startsWith("image:") || lower.startsWith("изображение:")) {
+            return true;
+        }
+        if (lower.contains("просмотр") && item.hasImage() && item.hasLink()) {
             return true;
         }
         return false;
-    }
-
-    private boolean isPromoLinkOnly(Element el, String text) {
-        Elements links = el.select("a");
-        if (links.isEmpty()) {
-            return false;
-        }
-        String linkText = normalize(links.text());
-        boolean onlyLinks = normalize(el.text()).equals(linkText);
-        return !linkText.isEmpty() && (linkText.equals(text) || onlyLinks);
     }
 
     private String normalize(String text) {
@@ -405,26 +399,38 @@ public class ParseService {
         return h1.parent() == null ? h1 : h1.parent();
     }
 
-    private List<Element> collectBlocksAfterH1(Element root, Element h1) {
-        List<Element> blocks = new ArrayList<>();
+    private List<LineItem> collectLineItemsAfterH1(Element root, Element h1) {
+        List<LineItem> items = new ArrayList<>();
         NodeTraversor.traverse(new NodeVisitor() {
             boolean started = false;
 
             @Override
             public void head(Node node, int depth) {
-                if (!(node instanceof Element el)) {
-                    return;
-                }
-                if (el.equals(h1)) {
+                if (node.equals(h1)) {
                     started = true;
                     return;
                 }
                 if (!started) {
                     return;
                 }
-                String tag = el.tagName();
-                if (BLOCK_TAGS.contains(tag)) {
-                    blocks.add(el);
+                if (node instanceof Element el) {
+                    if ("br".equals(el.tagName())) {
+                        items.add(new LineItem("", false, false, false));
+                    }
+                    return;
+                }
+                if (node instanceof TextNode textNode) {
+                    String raw = textNode.text();
+                    if (raw == null || raw.isBlank()) {
+                        return;
+                    }
+                    Element block = findNearestBlock(textNode.parent());
+                    boolean linkOnly = isLinkOnlyBlock(block);
+                    boolean hasImg = block != null && block.select("img").size() > 0;
+                    boolean hasLink = block != null && block.select("a").size() > 0;
+                    for (String line : splitLines(raw)) {
+                        items.add(new LineItem(line, linkOnly, hasImg, hasLink));
+                    }
                 }
             }
 
@@ -432,12 +438,59 @@ public class ParseService {
             public void tail(Node node, int depth) {
             }
         }, root);
-        return blocks;
+        return items;
+    }
+
+    private List<String> splitLines(String raw) {
+        String cleaned = raw.replace('\u00A0', ' ');
+        String[] parts = cleaned.split("\\R");
+        List<String> lines = new ArrayList<>();
+        for (String part : parts) {
+            String line = part.trim();
+            if (line.isEmpty()) {
+                lines.add("");
+            } else {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    private Element findNearestBlock(Element el) {
+        Element cursor = el;
+        while (cursor != null) {
+            if (BLOCK_TAGS.contains(cursor.tagName())) {
+                return cursor;
+            }
+            cursor = cursor.parent();
+        }
+        return el;
+    }
+
+    private boolean isLinkOnlyBlock(Element el) {
+        if (el == null) {
+            return false;
+        }
+        Elements links = el.select("a");
+        if (links.isEmpty()) {
+            return false;
+        }
+        String linkText = normalize(links.text());
+        String blockText = normalize(el.text());
+        return !linkText.isEmpty() && linkText.equals(blockText);
     }
 
     @Value
     private static class LinkItem {
         String title;
         String url;
+    }
+
+    @Value
+    private static class LineItem {
+        String text;
+        boolean linkOnly;
+        boolean hasImage;
+        boolean hasLink;
     }
 }
