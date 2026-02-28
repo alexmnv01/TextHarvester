@@ -1,0 +1,19 @@
+package com.textharvester.config;
+
+import lombok.Data;
+
+import java.util.List;
+
+@Data
+public class AppConfig {
+    private AppSettings app;
+
+    @Data
+    public static class AppSettings {
+        private List<String> modes;
+        private String defaultMode;
+        private String singlePageUrl;
+        private List<String> listPageUrls;
+        private String outputDir;
+    }
+}

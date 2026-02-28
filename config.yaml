@@ -1,0 +1,10 @@
+app:
+  modes:
+    - single
+    - list
+    - build-site-list
+  defaultMode: single
+  singlePageUrl: "https://oper.ru/video/"
+  listPageUrls:
+    - "https://oper.ru/video/"
+  outputDir: "out-files"
