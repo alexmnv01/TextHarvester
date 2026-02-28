@@ -250,10 +250,6 @@ public class ParseService {
                 continue;
             }
 
-            if (shouldLogCandidate(text, item)) {
-                AppLogger.info("Candidate line: " + text);
-            }
-
             if (!afterMeta && isMetaLine(text)) {
                 afterMeta = true;
                 metaFound = true;
@@ -390,16 +386,6 @@ public class ParseService {
         return hasPipes && hasViews && hasTextLink;
     }
 
-    private boolean shouldLogCandidate(String text, LineItem item) {
-        String lower = text.toLowerCase();
-        if (lower.contains("просмотр") || lower.contains("views") || lower.contains("текст") || lower.contains("|")) {
-            return true;
-        }
-        if (REPLY_PATTERN.matcher(text).find()) {
-            return true;
-        }
-        return item.isLinkOnly();
-    }
 
     private boolean isCommentAnchor(String text) {
         String lower = text.toLowerCase();
