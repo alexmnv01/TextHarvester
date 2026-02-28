@@ -1,7 +1,7 @@
 # TextHarvester
 Готова первая рабочая версия
 
-feature-create-list
+feature-parse-list
 
 JavaFX‑приложение для парсинга текстовых транскриптов роликов с сайта `oper.ru` и сохранения их в файлы `nameFile.txt`.
 
