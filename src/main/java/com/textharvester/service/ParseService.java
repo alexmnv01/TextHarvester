@@ -6,27 +6,33 @@ import lombok.Value;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
 import org.jsoup.select.Elements;
+import org.jsoup.select.NodeTraversor;
+import org.jsoup.select.NodeVisitor;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.Set;
 
 public class ParseService {
     private static final String USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
+    private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final Set<String> BLOCK_TAGS = Set.of("p", "div", "li", "blockquote", "pre");
 
     public void runSingle(AppConfig.AppSettings settings) {
         String pageUrl = settings.getSinglePageUrl();
@@ -174,19 +180,18 @@ public class ParseService {
             return null;
         }
 
-        Element contentRoot = h1.parent();
-        Elements siblings = contentRoot.children();
-        int startIndex = siblings.indexOf(h1) + 1;
-        if (startIndex <= 0 || startIndex >= siblings.size()) {
+        Element contentRoot = findContentRoot(h1);
+        List<Element> blocks = collectBlocksAfterH1(contentRoot, h1);
+        if (blocks.isEmpty()) {
             return null;
         }
 
         boolean afterMeta = false;
         boolean inTranscript = false;
         List<String> lines = new ArrayList<>();
+        String lastLine = "";
 
-        for (int i = startIndex; i < siblings.size(); i++) {
-            Element el = siblings.get(i);
+        for (Element el : blocks) {
             String text = normalize(el.wholeText());
             if (text.isEmpty()) {
                 continue;
@@ -201,7 +206,7 @@ public class ParseService {
                 continue;
             }
 
-            if (isCommentAnchor(text) || isRecommendedBlock(el, text)) {
+            if (isCommentAnchor(el, text) || isRecommendedBlock(el, text)) {
                 if (inTranscript) {
                     break;
                 }
@@ -223,7 +228,10 @@ public class ParseService {
             }
 
             if (inTranscript) {
-                lines.add(text);
+                if (!text.equals(lastLine)) {
+                    lines.add(text);
+                    lastLine = text;
+                }
             }
         }
 
@@ -249,11 +257,20 @@ public class ParseService {
 
     private boolean isMetaLine(String text) {
         String lower = text.toLowerCase();
-        return lower.contains("|") && lower.contains("просмотр") && lower.contains("текст");
+        boolean hasPipes = lower.contains("|");
+        boolean hasViews = lower.contains("просмотр") || lower.contains("views");
+        boolean hasTextLink = lower.contains("текст") || lower.contains("text");
+        boolean hasTime = TIME_PATTERN.matcher(lower).find();
+        return hasPipes && hasViews && hasTextLink && hasTime;
     }
 
-    private boolean isCommentAnchor(String text) {
+    private boolean isCommentAnchor(Element el, String text) {
         String lower = text.toLowerCase();
+        String id = el.id().toLowerCase();
+        String classes = String.join(" ", el.classNames()).toLowerCase();
+        if (id.contains("comment") || classes.contains("comment") || id.contains("komment") || classes.contains("komment")) {
+            return true;
+        }
         return lower.contains("комментарии")
                 || lower.contains("отправлено")
                 || lower.contains("ответить")
@@ -275,7 +292,8 @@ public class ParseService {
             return false;
         }
         String linkText = normalize(links.text());
-        return !linkText.isEmpty() && linkText.equals(text);
+        boolean onlyLinks = normalize(el.text()).equals(linkText);
+        return !linkText.isEmpty() && (linkText.equals(text) || onlyLinks);
     }
 
     private String normalize(String text) {
@@ -312,6 +330,51 @@ public class ParseService {
             return href;
         }
         return URI.create(base).resolve(href).toString();
+    }
+
+    private Element findContentRoot(Element h1) {
+        Element cursor = h1;
+        while (cursor != null) {
+            String id = cursor.id().toLowerCase();
+            String classes = String.join(" ", cursor.classNames()).toLowerCase();
+            if (id.contains("content") || id.contains("main")
+                    || classes.contains("content") || classes.contains("main")
+                    || "article".equals(cursor.tagName())) {
+                return cursor;
+            }
+            cursor = cursor.parent();
+        }
+        return h1.parent() == null ? h1 : h1.parent();
+    }
+
+    private List<Element> collectBlocksAfterH1(Element root, Element h1) {
+        List<Element> blocks = new ArrayList<>();
+        NodeTraversor.traverse(new NodeVisitor() {
+            boolean started = false;
+
+            @Override
+            public void head(Node node, int depth) {
+                if (!(node instanceof Element el)) {
+                    return;
+                }
+                if (el.equals(h1)) {
+                    started = true;
+                    return;
+                }
+                if (!started) {
+                    return;
+                }
+                String tag = el.tagName();
+                if (BLOCK_TAGS.contains(tag)) {
+                    blocks.add(el);
+                }
+            }
+
+            @Override
+            public void tail(Node node, int depth) {
+            }
+        }, root);
+        return blocks;
     }
 
     @Value
