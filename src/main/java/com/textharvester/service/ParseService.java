@@ -301,7 +301,8 @@ public class ParseService {
             try {
                 String transcript = extractTranscript(item.getUrl(), settings);
                 if (transcript == null || transcript.isBlank()) {
-                    AppLogger.warn("Transcript not found: " + item.getTitle() + " -> " + item.getUrl());
+                    AppLogger.warn("На данной странице текстовая версия ролика не обнаружена: "
+                            + item.getTitle() + " -> " + item.getUrl());
                     processedLocal++;
                     continue;
                 }
