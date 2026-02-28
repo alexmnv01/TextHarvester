@@ -113,6 +113,10 @@ mvn javafx:jlink
 - `target/TextHarvester` (папка с runtime)
 - запуск: `target/TextHarvester/bin/TextHarvester`
 
+Конфигурация:
+- положите `config.yaml` рядом с папкой `bin` (то есть в `target/TextHarvester/`),  
+  либо запускайте из каталога, где лежит `config.yaml`.
+
 Если нужен архив:
 ```bash
 mvn javafx:jlink-zip
