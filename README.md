@@ -33,6 +33,8 @@ app:
     - "https://oper.ru/video/"
   outputDir: "out-files"
   maxItems: 0
+  userAgent: "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)"
+  timeoutSeconds: 15
 ```
 
 ### Описание полей
@@ -42,6 +44,8 @@ app:
 - `listPageUrls` — список страниц со списками роликов (для режима `list`).
 - `outputDir` — каталог для сохранения результатов.
 - `maxItems` — лимит количества роликов для обработки. `0` = без ограничения.
+- `userAgent` — значение `User-Agent` для HTTP-запросов.
+- `timeoutSeconds` — таймаут HTTP-запросов в секундах.
 
 ## Режимы работы
 

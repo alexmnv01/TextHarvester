@@ -31,8 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ParseService {
-    private static final String USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
-    private static final Duration TIMEOUT = Duration.ofSeconds(15);
+    private static final String DEFAULT_USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(15);
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
@@ -56,10 +56,10 @@ public class ParseService {
 
         AppLogger.info("Loading list page: " + pageUrl);
         try {
-            List<LinkItem> links = collectLinksFromListPage(pageUrl);
+            List<LinkItem> links = collectLinksFromListPage(pageUrl, settings);
             AppLogger.info("Collected links: " + links.size());
             if (!isCancelled.getAsBoolean()) {
-                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl, settings.getMaxItems());
+                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
             }
         } catch (IOException e) {
             AppLogger.error("Failed to load list page: " + pageUrl, e);
@@ -93,7 +93,7 @@ public class ParseService {
             }
             AppLogger.info("Loading list page: " + pageUrl);
             try {
-                List<LinkItem> links = collectLinksFromListPage(pageUrl);
+                List<LinkItem> links = collectLinksFromListPage(pageUrl, settings);
                 for (LinkItem item : links) {
                     unique.putIfAbsent(item.getUrl(), item);
                 }
@@ -104,7 +104,7 @@ public class ParseService {
         }
 
         AppLogger.info("Total unique links: " + unique.size());
-        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems());
+        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
     }
 
     public void buildSiteList(AppConfig.AppSettings settings) {
@@ -124,7 +124,7 @@ public class ParseService {
                 AppLogger.warn("Build-site-list cancelled");
                 return;
             }
-            List<String> pageLinks = collectPaginationLinks(pageUrl);
+            List<String> pageLinks = collectPaginationLinks(pageUrl, settings);
             if (pageLinks.isEmpty()) {
                 AppLogger.warn("No pagination links found");
                 return;
@@ -141,11 +141,8 @@ public class ParseService {
         }
     }
 
-    private List<LinkItem> collectLinksFromListPage(String pageUrl) throws IOException {
-        Document doc = Jsoup.connect(pageUrl)
-                .userAgent(USER_AGENT)
-                .timeout((int) TIMEOUT.toMillis())
-                .get();
+    private List<LinkItem> collectLinksFromListPage(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+        Document doc = connect(pageUrl, settings);
 
         Elements anchors = doc.select("a[href*=/video/view.php?t=]");
         Map<String, LinkItem> unique = new LinkedHashMap<>();
@@ -162,11 +159,8 @@ public class ParseService {
         return new ArrayList<>(unique.values());
     }
 
-    private List<String> collectPaginationLinks(String pageUrl) throws IOException {
-        Document doc = Jsoup.connect(pageUrl)
-                .userAgent(USER_AGENT)
-                .timeout((int) TIMEOUT.toMillis())
-                .get();
+    private List<String> collectPaginationLinks(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+        Document doc = connect(pageUrl, settings);
 
         Elements candidates = doc.select("*:matchesOwn(?i)страницы");
         Map<String, String> unique = new LinkedHashMap<>();
@@ -204,11 +198,8 @@ public class ParseService {
         return new ArrayList<>(unique.values());
     }
 
-    private String extractTranscript(String pageUrl) throws IOException {
-        Document doc = Jsoup.connect(pageUrl)
-                .userAgent(USER_AGENT)
-                .timeout((int) TIMEOUT.toMillis())
-                .get();
+    private String extractTranscript(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+        Document doc = connect(pageUrl, settings);
 
         Element h1 = doc.selectFirst("h1");
         if (h1 == null) {
@@ -282,11 +273,11 @@ public class ParseService {
     }
 
     private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
-        processLinks(outputDir, links, isCancelled, null, null, null, 0);
+        processLinks(outputDir, links, isCancelled, null, null, null, 0, null);
     }
 
     private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
-                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems) {
+                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems, AppConfig.AppSettings settings) {
         int limit = Math.max(0, maxItems);
         int processedLocal = 0;
         for (LinkItem item : links) {
@@ -303,7 +294,7 @@ public class ParseService {
             }
             AppLogger.info("Processing: " + item.getTitle() + " -> " + item.getUrl());
             try {
-                String transcript = extractTranscript(item.getUrl());
+                String transcript = extractTranscript(item.getUrl(), settings);
                 if (transcript == null || transcript.isBlank()) {
                     AppLogger.warn("Transcript not found: " + item.getUrl());
                     processedLocal++;
@@ -391,6 +382,23 @@ public class ParseService {
             return href;
         }
         return URI.create(base).resolve(href).toString();
+    }
+
+    private Document connect(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+        String userAgent = DEFAULT_USER_AGENT;
+        Duration timeout = DEFAULT_TIMEOUT;
+        if (settings != null) {
+            if (settings.getUserAgent() != null && !settings.getUserAgent().isBlank()) {
+                userAgent = settings.getUserAgent();
+            }
+            if (settings.getTimeoutSeconds() > 0) {
+                timeout = Duration.ofSeconds(settings.getTimeoutSeconds());
+            }
+        }
+        return Jsoup.connect(pageUrl)
+                .userAgent(userAgent)
+                .timeout((int) timeout.toMillis())
+                .get();
     }
 
     private Element findContentRoot(Element h1) {

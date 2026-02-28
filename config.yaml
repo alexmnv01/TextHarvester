@@ -9,3 +9,5 @@ app:
     - "https://oper.ru/video/"
   outputDir: "out-files"
   maxItems: 0
+  userAgent: "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)"
+  timeoutSeconds: 15

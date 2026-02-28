@@ -16,5 +16,7 @@ public class AppConfig {
         private List<String> listPageUrls;
         private String outputDir;
         private int maxItems;
+        private String userAgent;
+        private int timeoutSeconds;
     }
 }
