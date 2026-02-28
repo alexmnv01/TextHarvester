@@ -91,6 +91,17 @@ app:
 mvn clean package
 ```
 
+## Запуск из JAR
+После сборки будет создан файл:
+- `target/text-harvester-0.1.0-SNAPSHOT-all.jar`
+
+Запуск:
+```bash
+java -jar target/text-harvester-0.1.0-SNAPSHOT-all.jar
+```
+
+Примечание: для запуска требуется установленная Java 21 с поддержкой JavaFX.
+
 ## Запуск (GUI)
 
 ```bash
