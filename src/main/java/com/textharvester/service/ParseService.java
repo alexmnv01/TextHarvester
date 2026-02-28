@@ -39,31 +39,64 @@ public class ParseService {
         try {
             List<LinkItem> links = collectLinksFromListPage(pageUrl);
             AppLogger.info("Collected links: " + links.size());
-            for (LinkItem item : links) {
-                AppLogger.info("Processing: " + item.getTitle() + " -> " + item.getUrl());
-                try {
-                    String transcript = extractTranscript(item.getUrl());
-                    if (transcript == null || transcript.isBlank()) {
-                        AppLogger.warn("Transcript not found: " + item.getUrl());
-                        continue;
-                    }
-                    Path outPath = writeTranscript(settings.getOutputDir(), item.getTitle(), transcript);
-                    AppLogger.info("Saved: " + outPath);
-                } catch (Exception e) {
-                    AppLogger.error("Failed to process: " + item.getUrl(), e);
-                }
-            }
+            processLinks(settings.getOutputDir(), links);
         } catch (IOException e) {
             AppLogger.error("Failed to load list page: " + pageUrl, e);
         }
     }
 
     public void runList(AppConfig.AppSettings settings) {
-        AppLogger.info("List mode stub. Pages: " + settings.getListPageUrls());
+        List<String> pages = settings.getListPageUrls();
+        if (pages == null || pages.isEmpty()) {
+            AppLogger.warn("listPageUrls is empty in config");
+            return;
+        }
+
+        Map<String, LinkItem> unique = new LinkedHashMap<>();
+        for (String pageUrl : pages) {
+            if (pageUrl == null || pageUrl.isBlank()) {
+                continue;
+            }
+            AppLogger.info("Loading list page: " + pageUrl);
+            try {
+                List<LinkItem> links = collectLinksFromListPage(pageUrl);
+                for (LinkItem item : links) {
+                    unique.putIfAbsent(item.getUrl(), item);
+                }
+                AppLogger.info("Links from page: " + links.size());
+            } catch (IOException e) {
+                AppLogger.error("Failed to load list page: " + pageUrl, e);
+            }
+        }
+
+        AppLogger.info("Total unique links: " + unique.size());
+        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()));
     }
 
     public void buildSiteList(AppConfig.AppSettings settings) {
-        AppLogger.info("Build-site-list mode stub.");
+        String pageUrl = settings.getSinglePageUrl();
+        if (pageUrl == null || pageUrl.isBlank()) {
+            AppLogger.warn("singlePageUrl is empty in config");
+            return;
+        }
+
+        AppLogger.info("Building site list from: " + pageUrl);
+        try {
+            List<String> pageLinks = collectPaginationLinks(pageUrl);
+            if (pageLinks.isEmpty()) {
+                AppLogger.warn("No pagination links found");
+                return;
+            }
+
+            Path outDir = Path.of(settings.getOutputDir() == null || settings.getOutputDir().isBlank()
+                    ? "out-files" : settings.getOutputDir());
+            Files.createDirectories(outDir);
+            Path outPath = outDir.resolve("site-list.txt");
+            Files.write(outPath, pageLinks, StandardCharsets.UTF_8);
+            AppLogger.info("Saved site list: " + outPath + " (" + pageLinks.size() + " pages)");
+        } catch (IOException e) {
+            AppLogger.error("Failed to build site list", e);
+        }
     }
 
     private List<LinkItem> collectLinksFromListPage(String pageUrl) throws IOException {
@@ -82,6 +115,48 @@ public class ParseService {
             }
             String absUrl = toAbsoluteUrl(pageUrl, href);
             unique.putIfAbsent(absUrl, new LinkItem(title, absUrl));
+        }
+
+        return new ArrayList<>(unique.values());
+    }
+
+    private List<String> collectPaginationLinks(String pageUrl) throws IOException {
+        Document doc = Jsoup.connect(pageUrl)
+                .userAgent(USER_AGENT)
+                .timeout((int) TIMEOUT.toMillis())
+                .get();
+
+        Elements candidates = doc.select("*:matchesOwn(?i)страницы");
+        Map<String, String> unique = new LinkedHashMap<>();
+        for (Element el : candidates) {
+            Element parent = el.parent();
+            if (parent == null) {
+                continue;
+            }
+            Elements links = parent.select("a[href]");
+            for (Element a : links) {
+                String href = a.attr("href").trim();
+                if (href.isEmpty()) {
+                    continue;
+                }
+                String absUrl = toAbsoluteUrl(pageUrl, href);
+                unique.putIfAbsent(absUrl, absUrl);
+            }
+        }
+
+        if (unique.isEmpty()) {
+            Elements all = doc.select("a[href*=/video/]");
+            for (Element a : all) {
+                String text = a.text().trim();
+                if (text.matches("\\d+")) {
+                    String href = a.attr("href").trim();
+                    if (href.isEmpty()) {
+                        continue;
+                    }
+                    String absUrl = toAbsoluteUrl(pageUrl, href);
+                    unique.putIfAbsent(absUrl, absUrl);
+                }
+            }
         }
 
         return new ArrayList<>(unique.values());
@@ -153,6 +228,23 @@ public class ParseService {
         }
 
         return String.join(System.lineSeparator(), lines).trim();
+    }
+
+    private void processLinks(String outputDir, List<LinkItem> links) {
+        for (LinkItem item : links) {
+            AppLogger.info("Processing: " + item.getTitle() + " -> " + item.getUrl());
+            try {
+                String transcript = extractTranscript(item.getUrl());
+                if (transcript == null || transcript.isBlank()) {
+                    AppLogger.warn("Transcript not found: " + item.getUrl());
+                    continue;
+                }
+                Path outPath = writeTranscript(outputDir, item.getTitle(), transcript);
+                AppLogger.info("Saved: " + outPath);
+            } catch (Exception e) {
+                AppLogger.error("Failed to process: " + item.getUrl(), e);
+            }
+        }
     }
 
     private boolean isMetaLine(String text) {
