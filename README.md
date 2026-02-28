@@ -1,7 +1,7 @@
 # TextHarvester
 Готова первая рабочая версия
 
-feature-list
+feature-create-list
 
 JavaFX‑приложение для парсинга текстовых транскриптов роликов с сайта `oper.ru` и сохранения их в файлы `nameFile.txt`.
 
@@ -88,11 +88,19 @@ app:
 - Если транскрипт не найден, в лог пишется URL и заголовок ролика.
 - Для быстрой проверки используйте `dryRun: true` и `maxItems: 1`.
 
+#  Как запустить!!!
 ## Сборка
 
 ```bash
 mvn clean package
 ```
+## Запуск Рабочий вариант!!! jar с JavaFX SDK: 
+Запуск происходит из дирректории G:\Prpgrammers\ARBEITEN\TextHarvester\
+В нее предвариательно копируем файл text-harvester-0.2.0-SNAPSHOT-all.jar
+```bash
+java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar ./text-harvester-0.2.0-SNAPSHOT-all.jar
+```
+
 
 ## Запуск из JAR
 После сборки будет создан файл:
@@ -138,15 +146,12 @@ mvn javafx:run
 mvn javafx:run -Djavafx.sdk=C:\Development\javafx-sdk-21.0.10
 ```
 
-Запуск jar с JavaFX SDK:
-```bash
-java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.controls -jar ./text-harvester-0.1.0-SNAPSHOT-all.jar
-```
 
 Если будут проблемы с парсингом
 Предлагаю изменить алгоритм обработки.
 1. Давай работать со страницей как с тестовым документом
 2. У нас есть четко определенное начало нужного фрагмента
+```
 <dl>
 <dd>
 	<div class="body"><br><br><b>
@@ -180,3 +185,4 @@ java --module-path C:\Development\javafx-sdk-21.0.10\lib --add-modules javafx.co
 <br><br><b>Д.Ю.</b> Отлично. Познавательно, как обычно. Как-то я даже и не знал такого. Спасибо, Игорь Васильевич. А на сегодня все. До новых встреч.</div>
 </dd>
 </dl>
+```

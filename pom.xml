@@ -4,7 +4,7 @@
 
     <groupId>com.textharvester</groupId>
     <artifactId>text-harvester</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
