@@ -3,6 +3,7 @@ package com.textharvester.config;
 import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
+import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,7 +22,7 @@ public class ConfigLoader {
         if (!Files.exists(configPath)) {
             throw new IOException("Config file not found: " + configPath.toAbsolutePath());
         }
-        Yaml yaml = new Yaml(new Constructor(AppConfig.class));
+        Yaml yaml = new Yaml(new Constructor(AppConfig.class, new LoaderOptions()));
         try (InputStream in = Files.newInputStream(configPath)) {
             AppConfig config = yaml.load(in);
             if (config == null || config.getApp() == null) {
