@@ -466,11 +466,27 @@ public class ParseService {
     }
 
     private Element findDlBody(Document doc) {
-        Element dd = doc.selectFirst("dl dd div.body");
-        if (dd != null) {
-            return dd;
+        Elements bodies = doc.select("dl dd div.body");
+        if (bodies.isEmpty()) {
+            return null;
         }
-        return null;
+        Element best = null;
+        int bestScore = -1;
+        for (Element body : bodies) {
+            String html = body.html();
+            int bCount = body.select("b").size();
+            int brCount = body.select("br").size();
+            int len = normalize(Parser.unescapeEntities(html.replaceAll("(?is)<[^>]+>", ""), false)).length();
+            int score = (bCount * 1000) + (brCount * 10) + len;
+            if (score > bestScore) {
+                bestScore = score;
+                best = body;
+            }
+        }
+        if (best != null) {
+            AppLogger.info("DL-body candidates: " + bodies.size() + ", selected score: " + bestScore);
+        }
+        return best;
     }
 
     private String extractFromDlBody(Element body) {
