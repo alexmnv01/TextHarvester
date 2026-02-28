@@ -102,6 +102,22 @@ java -jar target/text-harvester-0.1.0-SNAPSHOT-all.jar
 
 Примечание: для запуска требуется установленная Java 21 с поддержкой JavaFX.
 
+## Запуск без установки JavaFX (Windows, jlink)
+Собираем runtime‑image, который можно запускать в любом месте на Windows:
+
+```bash
+mvn javafx:jlink
+```
+
+Результат:
+- `target/TextHarvester` (папка с runtime)
+- запуск: `target/TextHarvester/bin/TextHarvester`
+
+Если нужен архив:
+```bash
+mvn javafx:jlink-zip
+```
+
 ## Запуск (GUI)
 
 ```bash
