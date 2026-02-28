@@ -15,5 +15,6 @@ public class AppConfig {
         private String singlePageUrl;
         private List<String> listPageUrls;
         private String outputDir;
+        private int maxItems;
     }
 }

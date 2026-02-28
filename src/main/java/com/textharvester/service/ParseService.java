@@ -59,7 +59,7 @@ public class ParseService {
             List<LinkItem> links = collectLinksFromListPage(pageUrl);
             AppLogger.info("Collected links: " + links.size());
             if (!isCancelled.getAsBoolean()) {
-                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl);
+                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl, settings.getMaxItems());
             }
         } catch (IOException e) {
             AppLogger.error("Failed to load list page: " + pageUrl, e);
@@ -104,7 +104,7 @@ public class ParseService {
         }
 
         AppLogger.info("Total unique links: " + unique.size());
-        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl);
+        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems());
     }
 
     public void buildSiteList(AppConfig.AppSettings settings) {
@@ -282,14 +282,20 @@ public class ParseService {
     }
 
     private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
-        processLinks(outputDir, links, isCancelled, null, null, null);
+        processLinks(outputDir, links, isCancelled, null, null, null, 0);
     }
 
     private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
-                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
+                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems) {
+        int limit = Math.max(0, maxItems);
+        int processedLocal = 0;
         for (LinkItem item : links) {
             if (isCancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                 AppLogger.warn("Processing cancelled");
+                break;
+            }
+            if (limit > 0 && processedLocal >= limit) {
+                AppLogger.info("Max items reached: " + limit);
                 break;
             }
             if (currentUrl != null) {
@@ -300,6 +306,7 @@ public class ParseService {
                 String transcript = extractTranscript(item.getUrl());
                 if (transcript == null || transcript.isBlank()) {
                     AppLogger.warn("Transcript not found: " + item.getUrl());
+                    processedLocal++;
                     continue;
                 }
                 Path outPath = writeTranscript(outputDir, item.getTitle(), transcript);
@@ -313,6 +320,7 @@ public class ParseService {
                 if (processed != null) {
                     processed.incrementAndGet();
                 }
+                processedLocal++;
             }
         }
     }
@@ -365,6 +373,7 @@ public class ParseService {
         if (Files.exists(target)) {
             String ts = LocalDateTime.now().format(FILE_TS);
             target = outDir.resolve(safeTitle + "_" + ts + ".txt");
+            AppLogger.info("File exists, using timestamp suffix: " + ts);
         }
 
         Files.writeString(target, transcript, StandardCharsets.UTF_8);

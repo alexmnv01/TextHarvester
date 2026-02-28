@@ -32,6 +32,7 @@ app:
   listPageUrls:
     - "https://oper.ru/video/"
   outputDir: "out-files"
+  maxItems: 0
 ```
 
 ### Описание полей
@@ -40,6 +41,7 @@ app:
 - `singlePageUrl` — страница со списком роликов (для режима `single` и `build-site-list`).
 - `listPageUrls` — список страниц со списками роликов (для режима `list`).
 - `outputDir` — каталог для сохранения результатов.
+- `maxItems` — лимит количества роликов для обработки. `0` = без ограничения.
 
 ## Режимы работы
 

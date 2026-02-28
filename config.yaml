@@ -8,3 +8,4 @@ app:
   listPageUrls:
     - "https://oper.ru/video/"
   outputDir: "out-files"
+  maxItems: 0
