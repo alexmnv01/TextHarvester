@@ -9,8 +9,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
-import org.jsoup.select.NodeTraversor;
-import org.jsoup.select.NodeVisitor;
+import org.jsoup.parser.Parser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -475,50 +474,8 @@ public class ParseService {
     }
 
     private String extractFromDlBody(Element body) {
-        List<String> lines = new ArrayList<>();
-        NodeTraversor.traverse(new NodeVisitor() {
-            boolean started = false;
-
-            @Override
-            public void head(Node node, int depth) {
-                if (node instanceof Element el) {
-                    String tag = el.tagName();
-                    if ("b".equals(tag) && !started) {
-                        started = true;
-                        return;
-                    }
-                    if ("br".equals(tag)) {
-                        if (started) {
-                            lines.add("");
-                        }
-                        return;
-                    }
-                }
-                if (!started) {
-                    return;
-                }
-                if (node instanceof TextNode tn) {
-                    String text = normalize(tn.text());
-                    if (!text.isEmpty()) {
-                        lines.add(text);
-                    }
-                }
-            }
-
-            @Override
-            public void tail(Node node, int depth) {
-            }
-        }, body);
-
-        String joined = String.join(System.lineSeparator(), lines).trim();
-        if (countLines(joined) <= 1) {
-            String fallback = extractFromDlBodyHtml(body);
-            if (fallback != null && !fallback.isBlank()) {
-                AppLogger.info("DL-body fallback HTML extraction used");
-                return fallback;
-            }
-        }
-        return joined;
+        String extracted = extractFromDlBodyHtml(body);
+        return extracted == null ? "" : extracted;
     }
 
     private int countLines(String text) {
@@ -532,11 +489,12 @@ public class ParseService {
         String html = body.html();
         int bIndex = html.toLowerCase().indexOf("<b>");
         if (bIndex >= 0) {
-            html = html.substring(bIndex + 3);
+            html = html.substring(bIndex);
         }
-        html = html.replaceAll("(?i)<br\\s*/?>", "\n");
-        String text = Jsoup.parse(html).wholeText();
-        return text == null ? "" : text.trim();
+        String withBreaks = html.replaceAll("(?i)<br\\s*/?>", "\n");
+        String noTags = withBreaks.replaceAll("(?is)<[^>]+>", "");
+        String unescaped = Parser.unescapeEntities(noTags, false);
+        return unescaped == null ? "" : unescaped.trim();
     }
 
     private Element findListScope(Document doc) {
