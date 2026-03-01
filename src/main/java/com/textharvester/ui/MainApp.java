@@ -35,9 +35,8 @@ public class MainApp extends Application {
         modeBox.setValue(config.getApp().getDefaultMode());
 
         ListView<String> pagesList = new ListView<>();
-        if (config.getApp().getListPageUrls() != null) {
-            pagesList.getItems().addAll(config.getApp().getListPageUrls());
-        }
+        modeBox.valueProperty().addListener((obs, oldMode, newMode) -> updatePagesList(pagesList, config, newMode));
+        updatePagesList(pagesList, config, modeBox.getValue());
         pagesList.setPrefHeight(140);
 
         Button startButton = new Button("Start");
@@ -179,5 +178,24 @@ public class MainApp extends Application {
         HBox box = new HBox(10, l, control);
         HBox.setHgrow(control, Priority.ALWAYS);
         return box;
+    }
+
+    private void updatePagesList(ListView<String> pagesList, AppConfig config, String mode) {
+        pagesList.getItems().clear();
+        if (mode == null || mode.isBlank()) {
+            return;
+        }
+
+        if (mode.equals("single") || mode.equals("build-site-list")) {
+            String singlePageUrl = config.getApp().getSinglePageUrl();
+            if (singlePageUrl != null && !singlePageUrl.isBlank()) {
+                pagesList.getItems().add(singlePageUrl);
+            }
+            return;
+        }
+
+        if (mode.equals("list") && config.getApp().getListPageUrls() != null) {
+            pagesList.getItems().addAll(config.getApp().getListPageUrls());
+        }
     }
 }
