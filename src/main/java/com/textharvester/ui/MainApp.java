@@ -124,7 +124,11 @@ public class MainApp extends Application {
                 }
             };
 
-            currentTask.setOnSucceeded(e -> finishTask(statusLabel, progress, startButton, stopButton, "Finished"));
+            currentTask.setOnSucceeded(e -> {
+                finishTask(statusLabel, progress, startButton, stopButton, "Finished");
+                AppLogger.info("Процесс парсинга завершен");
+                AppLogger.info("Было создано файлов: " + saved.get());
+            });
             currentTask.setOnFailed(e -> finishTask(statusLabel, progress, startButton, stopButton, "Failed"));
             currentTask.setOnCancelled(e -> finishTask(statusLabel, progress, startButton, stopButton, "Cancelled"));
 
