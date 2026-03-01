@@ -36,6 +36,8 @@ public class ParseService {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(15);
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
+    private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
+    private static final Pattern TITLE_WITH_DATE_PATTERN = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{2,4}\\.\\s+.+");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final Set<String> BLOCK_TAGS = Set.of("p", "div", "li", "blockquote", "pre");
 
@@ -96,7 +98,10 @@ public class ParseService {
             try {
                 List<LinkItem> links = collectLinksFromListPage(pageUrl, settings);
                 for (LinkItem item : links) {
-                    unique.putIfAbsent(item.getUrl(), item);
+                    LinkItem existing = unique.get(item.getUrl());
+                    if (existing == null || (!titleHasDatePrefix(existing.getTitle()) && titleHasDatePrefix(item.getTitle()))) {
+                        unique.put(item.getUrl(), item);
+                    }
                 }
                 AppLogger.info("Links from page: " + links.size());
             } catch (IOException e) {
@@ -158,7 +163,9 @@ public class ParseService {
                 continue;
             }
             String absUrl = toAbsoluteUrl(pageUrl, href);
-            unique.putIfAbsent(absUrl, new LinkItem(title, absUrl));
+            String date = extractDateNearLink(a);
+            String titledWithDate = date == null ? title : date + ". " + title;
+            unique.putIfAbsent(absUrl, new LinkItem(titledWithDate, absUrl));
         }
 
         return new ArrayList<>(unique.values());
@@ -542,6 +549,30 @@ public class ParseService {
         }
         String lower = text.toLowerCase();
         return !lower.contains("страницы") && !lower.contains("pages");
+    }
+
+    private String extractDateNearLink(Element linkEl) {
+        Element cursor = linkEl;
+        for (int i = 0; i < 4 && cursor != null; i++) {
+            String date = findFirstDate(normalize(cursor.text()));
+            if (date != null) {
+                return date;
+            }
+            cursor = cursor.parent();
+        }
+        return null;
+    }
+
+    private String findFirstDate(String text) {
+        var matcher = LIST_DATE_PATTERN.matcher(text);
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return null;
+    }
+
+    private boolean titleHasDatePrefix(String title) {
+        return TITLE_WITH_DATE_PATTERN.matcher(normalize(title)).matches();
     }
 
     private Element findContentRoot(Element h1) {
