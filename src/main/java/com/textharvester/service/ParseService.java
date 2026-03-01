@@ -121,9 +121,17 @@ public class ParseService {
     }
 
     public void buildSiteList(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        buildSiteList(settings, isCancelled, null);
+    }
+
+    public void buildSiteList(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                              AtomicInteger listItemsCount) {
         String pageUrl = settings.getSinglePageUrl();
         if (pageUrl == null || pageUrl.isBlank()) {
             AppLogger.warn("singlePageUrl is empty in config");
+            if (listItemsCount != null) {
+                listItemsCount.set(0);
+            }
             return;
         }
 
@@ -131,11 +139,17 @@ public class ParseService {
         try {
             if (isCancelled.getAsBoolean()) {
                 AppLogger.warn("Build-site-list cancelled");
+                if (listItemsCount != null) {
+                    listItemsCount.set(0);
+                }
                 return;
             }
             List<String> pageLinks = collectPaginationLinks(pageUrl, settings);
             if (pageLinks.isEmpty()) {
                 AppLogger.warn("No pagination links found");
+                if (listItemsCount != null) {
+                    listItemsCount.set(0);
+                }
                 return;
             }
 
@@ -143,8 +157,14 @@ public class ParseService {
             Files.createDirectories(outDir);
             Path outPath = outDir.resolve(SITE_LIST_FILE);
             Files.writeString(outPath, toListPageUrlsYaml(pageLinks), StandardCharsets.UTF_8);
+            if (listItemsCount != null) {
+                listItemsCount.set(pageLinks.size());
+            }
             AppLogger.info("Saved site list: " + outPath + " (" + pageLinks.size() + " pages)");
         } catch (IOException e) {
+            if (listItemsCount != null) {
+                listItemsCount.set(0);
+            }
             AppLogger.error("Failed to build site list", e);
         }
     }

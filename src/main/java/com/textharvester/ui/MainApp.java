@@ -58,6 +58,7 @@ public class MainApp extends Application {
         AtomicBoolean cancelled = new AtomicBoolean(false);
         AtomicInteger processed = new AtomicInteger(0);
         AtomicInteger saved = new AtomicInteger(0);
+        AtomicInteger listItemsCount = new AtomicInteger(0);
         AtomicReference<String> currentUrl = new AtomicReference<>("");
 
         AppLogger.setUiSink(line -> Platform.runLater(() -> {
@@ -103,6 +104,7 @@ public class MainApp extends Application {
             cancelled.set(false);
             processed.set(0);
             saved.set(0);
+            listItemsCount.set(0);
             currentUrl.set("");
             startButton.setDisable(true);
             stopButton.setDisable(false);
@@ -117,7 +119,7 @@ public class MainApp extends Application {
                     switch (mode) {
                         case "single" -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
                         case "list" -> parseService.runList(config.getApp(), cancelled::get, processed, saved, currentUrl);
-                        case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get);
+                        case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get, listItemsCount);
                         default -> AppLogger.warn("Unknown mode: " + mode);
                     }
                     return null;
@@ -126,8 +128,13 @@ public class MainApp extends Application {
 
             currentTask.setOnSucceeded(e -> {
                 finishTask(statusLabel, progress, startButton, stopButton, "Finished");
-                AppLogger.info("Процесс парсинга завершен");
-                AppLogger.info("Было создано файлов: " + saved.get());
+                if (mode.equals("build-site-list")) {
+                    AppLogger.info("Процесс формирования списка завершен");
+                    AppLogger.info("Был создан список из " + listItemsCount.get() + "-элементов");
+                } else {
+                    AppLogger.info("Процесс парсинга завершен");
+                    AppLogger.info("Было создано файлов: " + saved.get());
+                }
             });
             currentTask.setOnFailed(e -> finishTask(statusLabel, progress, startButton, stopButton, "Failed"));
             currentTask.setOnCancelled(e -> finishTask(statusLabel, progress, startButton, stopButton, "Cancelled"));
