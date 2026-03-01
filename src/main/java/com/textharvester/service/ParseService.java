@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -34,6 +35,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ParseService {
     private static final String DEFAULT_USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(15);
+    private static final String SITE_LIST_DIR = "out-list";
+    private static final String SITE_LIST_FILE = "listPageUrls.yaml";
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
@@ -118,9 +121,17 @@ public class ParseService {
     }
 
     public void buildSiteList(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        buildSiteList(settings, isCancelled, null);
+    }
+
+    public void buildSiteList(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                              AtomicInteger listItemsCount) {
         String pageUrl = settings.getSinglePageUrl();
         if (pageUrl == null || pageUrl.isBlank()) {
             AppLogger.warn("singlePageUrl is empty in config");
+            if (listItemsCount != null) {
+                listItemsCount.set(0);
+            }
             return;
         }
 
@@ -128,21 +139,32 @@ public class ParseService {
         try {
             if (isCancelled.getAsBoolean()) {
                 AppLogger.warn("Build-site-list cancelled");
+                if (listItemsCount != null) {
+                    listItemsCount.set(0);
+                }
                 return;
             }
             List<String> pageLinks = collectPaginationLinks(pageUrl, settings);
             if (pageLinks.isEmpty()) {
                 AppLogger.warn("No pagination links found");
+                if (listItemsCount != null) {
+                    listItemsCount.set(0);
+                }
                 return;
             }
 
-            Path outDir = Path.of(settings.getOutputDir() == null || settings.getOutputDir().isBlank()
-                    ? "out-files" : settings.getOutputDir());
+            Path outDir = Path.of(SITE_LIST_DIR);
             Files.createDirectories(outDir);
-            Path outPath = outDir.resolve("site-list.txt");
-            Files.write(outPath, pageLinks, StandardCharsets.UTF_8);
+            Path outPath = outDir.resolve(SITE_LIST_FILE);
+            Files.writeString(outPath, toListPageUrlsYaml(pageLinks), StandardCharsets.UTF_8);
+            if (listItemsCount != null) {
+                listItemsCount.set(pageLinks.size());
+            }
             AppLogger.info("Saved site list: " + outPath + " (" + pageLinks.size() + " pages)");
         } catch (IOException e) {
+            if (listItemsCount != null) {
+                listItemsCount.set(0);
+            }
             AppLogger.error("Failed to build site list", e);
         }
     }
@@ -173,41 +195,84 @@ public class ParseService {
 
     private List<String> collectPaginationLinks(String pageUrl, AppConfig.AppSettings settings) throws IOException {
         Document doc = connect(pageUrl, settings);
-
-        Elements candidates = doc.select("*:matchesOwn(?i)страницы");
+        String normalizedBaseUrl = normalize(pageUrl);
         Map<String, String> unique = new LinkedHashMap<>();
-        for (Element el : candidates) {
-            Element parent = el.parent();
-            if (parent == null) {
-                continue;
-            }
-            Elements links = parent.select("a[href]");
-            for (Element a : links) {
-                String href = a.attr("href").trim();
-                if (href.isEmpty()) {
-                    continue;
-                }
-                String absUrl = toAbsoluteUrl(pageUrl, href);
-                unique.putIfAbsent(absUrl, absUrl);
-            }
+        unique.put(normalizedBaseUrl, normalizedBaseUrl);
+
+        Element paginationScope = findPaginationScope(doc);
+        if (paginationScope == null) {
+            AppLogger.warn("Pagination block not found, saved only singlePageUrl");
+            return new ArrayList<>(unique.values());
         }
 
-        if (unique.isEmpty()) {
-            Elements all = doc.select("a[href*=/video/]");
-            for (Element a : all) {
-                String text = a.text().trim();
-                if (text.matches("\\d+")) {
-                    String href = a.attr("href").trim();
-                    if (href.isEmpty()) {
-                        continue;
-                    }
-                    String absUrl = toAbsoluteUrl(pageUrl, href);
-                    unique.putIfAbsent(absUrl, absUrl);
-                }
+        Map<Integer, String> orderedPages = new TreeMap<>();
+        for (Element a : paginationScope.select("a[href]")) {
+            String numberText = normalize(a.text());
+            if (!numberText.matches("\\d+")) {
+                continue;
             }
+            int pageNumber = Integer.parseInt(numberText);
+            if (pageNumber <= 1) {
+                continue;
+            }
+            String href = a.attr("href").trim();
+            if (href.isEmpty()) {
+                continue;
+            }
+            String absUrl = toAbsoluteUrl(pageUrl, href);
+            orderedPages.putIfAbsent(pageNumber, absUrl);
+        }
+
+        for (String url : orderedPages.values()) {
+            unique.putIfAbsent(url, url);
         }
 
         return new ArrayList<>(unique.values());
+    }
+
+    private Element findPaginationScope(Document doc) {
+        Elements markers = doc.select("*:matchesOwn((?i)[cс]траницы\\s*:)");
+        Element best = null;
+        int bestScore = -1;
+        for (Element marker : markers) {
+            Element[] candidates = new Element[] { marker, marker.parent(), marker.parent() == null ? null : marker.parent().parent() };
+            for (Element candidate : candidates) {
+                if (candidate == null) {
+                    continue;
+                }
+                int score = countNumericPageLinks(candidate);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = candidate;
+                }
+            }
+        }
+        if (bestScore > 0) {
+            return best;
+        }
+        return null;
+    }
+
+    private int countNumericPageLinks(Element scope) {
+        int count = 0;
+        for (Element a : scope.select("a[href]")) {
+            if (normalize(a.text()).matches("\\d+")) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String toListPageUrlsYaml(List<String> pageLinks) {
+        StringBuilder yaml = new StringBuilder("listPageUrls:\n");
+        for (String url : pageLinks) {
+            yaml.append("  - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
+        }
+        return yaml.toString();
+    }
+
+    private String escapeYamlDoubleQuoted(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String extractTranscript(String pageUrl, AppConfig.AppSettings settings) throws IOException {

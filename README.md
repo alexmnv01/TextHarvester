@@ -65,8 +65,14 @@ app:
 - Извлекает транскрипт по каждой ссылке.
 
 ### `build-site-list`
-- Пытается собрать список страниц пагинации с `singlePageUrl`.
-- Сохраняет список в `outputDir/site-list.txt`.
+- Берет `singlePageUrl` как первую страницу списка.
+- Находит блок пагинации `Страницы:` и добавляет остальные URL страниц.
+- Сохраняет список в `out-list/listPageUrls.yaml` в формате:
+```yaml
+listPageUrls:
+  - "https://oper.ru/video/list.php?div=557"
+  - "https://oper.ru/video/list.php?div=557&page=1"
+```
 
 ## Интерфейс
 - Выбор режима из `modes` (берется из `config.yaml`).
