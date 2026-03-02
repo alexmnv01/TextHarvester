@@ -116,6 +116,19 @@ public class ParseService {
         processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
     }
 
+    public void runParserList(AppConfig.AppSettings settings) {
+        runList(settings);
+    }
+
+    public void runParserList(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        runList(settings, isCancelled);
+    }
+
+    public void runParserList(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
+        runList(settings, isCancelled, processed, saved, currentUrl);
+    }
+
     public void buildSiteList(AppConfig.AppSettings settings) {
         buildSiteList(settings, () -> false);
     }

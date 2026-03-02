@@ -1,7 +1,7 @@
 app:
   modes:
     - single
-    - list
+    - parser-list
     - build-site-list
   defaultMode: single
   singlePageUrl: "https://oper.ru/video/"
