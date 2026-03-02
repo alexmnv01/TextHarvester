@@ -69,9 +69,10 @@ app:
 - Находит блок пагинации `Страницы:` и добавляет остальные URL страниц.
 - Сохраняет список в `out-list/listPageUrls.yaml` в формате:
 ```yaml
-listPageUrls:
-  - "https://oper.ru/video/list.php?div=557"
-  - "https://oper.ru/video/list.php?div=557&page=1"
+app:
+  listPageUrls:
+    - "https://oper.ru/video/list.php?div=557"
+    - "https://oper.ru/video/list.php?div=557&page=1"
 ```
 
 ## Интерфейс

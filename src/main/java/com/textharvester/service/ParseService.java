@@ -277,9 +277,9 @@ public class ParseService {
     }
 
     private String toListPageUrlsYaml(List<String> pageLinks) {
-        StringBuilder yaml = new StringBuilder("listPageUrls:\n");
+        StringBuilder yaml = new StringBuilder("app:\n  listPageUrls:\n");
         for (String url : pageLinks) {
-            yaml.append("  - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
+            yaml.append("    - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
         }
         return yaml.toString();
     }
