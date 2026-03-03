@@ -94,7 +94,7 @@ public class MainApp extends Application {
                     return;
                 }
             }
-            if (mode.equals("list")) {
+            if (isParserListMode(mode)) {
                 if (config.getApp().getListPageUrls() == null || config.getApp().getListPageUrls().isEmpty()) {
                     AppLogger.warn("listPageUrls is empty in config");
                     return;
@@ -118,7 +118,7 @@ public class MainApp extends Application {
                 protected Void call() {
                     switch (mode) {
                         case "single" -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
-                        case "list" -> parseService.runList(config.getApp(), cancelled::get, processed, saved, currentUrl);
+                        case "parser-list" -> parseService.runParserList(config.getApp(), cancelled::get, processed, saved, currentUrl);
                         case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get, listItemsCount);
                         default -> AppLogger.warn("Unknown mode: " + mode);
                     }
@@ -205,8 +205,12 @@ public class MainApp extends Application {
             return;
         }
 
-        if (mode.equals("list") && config.getApp().getListPageUrls() != null) {
+        if (isParserListMode(mode) && config.getApp().getListPageUrls() != null) {
             pagesList.getItems().addAll(config.getApp().getListPageUrls());
         }
+    }
+
+    private boolean isParserListMode(String mode) {
+        return "parser-list".equals(mode);
     }
 }

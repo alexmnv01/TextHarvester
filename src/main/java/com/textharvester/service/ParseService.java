@@ -116,6 +116,19 @@ public class ParseService {
         processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
     }
 
+    public void runParserList(AppConfig.AppSettings settings) {
+        runList(settings);
+    }
+
+    public void runParserList(AppConfig.AppSettings settings, BooleanSupplier isCancelled) {
+        runList(settings, isCancelled);
+    }
+
+    public void runParserList(AppConfig.AppSettings settings, BooleanSupplier isCancelled,
+                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl) {
+        runList(settings, isCancelled, processed, saved, currentUrl);
+    }
+
     public void buildSiteList(AppConfig.AppSettings settings) {
         buildSiteList(settings, () -> false);
     }
@@ -264,9 +277,9 @@ public class ParseService {
     }
 
     private String toListPageUrlsYaml(List<String> pageLinks) {
-        StringBuilder yaml = new StringBuilder("listPageUrls:\n");
+        StringBuilder yaml = new StringBuilder("app:\n  listPageUrls:\n");
         for (String url : pageLinks) {
-            yaml.append("  - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
+            yaml.append("    - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
         }
         return yaml.toString();
     }
