@@ -3,6 +3,7 @@ app:
     - single
     - parser-list
     - build-site-list
+    - edit-single-page
   defaultMode: single
   singlePageUrl: "https://oper.ru/video/"
   listPageUrls:

@@ -1,14 +1,17 @@
 package com.textharvester.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.LoaderOptions;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 @Slf4j
 public class ConfigLoader {
@@ -30,6 +33,34 @@ public class ConfigLoader {
                 throw new IOException("Invalid config structure: missing 'app' section");
             }
             return config;
+        }
+    }
+
+    public void save(AppConfig config) throws IOException {
+        if (config == null || config.getApp() == null) {
+            throw new IOException("Invalid config: missing 'app' section");
+        }
+        Path target = resolveConfigPath(configPath);
+        if (target == null) {
+            target = configPath;
+        }
+        if (target.getParent() != null) {
+            Files.createDirectories(target.getParent());
+        }
+
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        options.setIndent(2);
+
+        Yaml yaml = new Yaml(options);
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                target,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        )) {
+            yaml.dump(config, writer);
         }
     }
 
