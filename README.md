@@ -28,7 +28,7 @@ mvn javafx:run
 app:
   modes:
     - single
-    - list
+    - parser-list
     - build-site-list
   defaultMode: single
   singlePageUrl: "https://oper.ru/video/"
@@ -45,7 +45,7 @@ app:
 - `modes` — список режимов, которые будут отображаться в UI.
 - `defaultMode` — режим по умолчанию при запуске.
 - `singlePageUrl` — страница со списком роликов (для режима `single` и `build-site-list`).
-- `listPageUrls` — список страниц со списками роликов (для режима `list`).
+- `listPageUrls` — список страниц со списками роликов (для режима `parser-list`).
 - `outputDir` — каталог для сохранения результатов.
 - `maxItems` — лимит количества роликов для обработки. `0` = без ограничения.
 - `userAgent` — значение `User-Agent` для HTTP-запросов.
@@ -59,7 +59,7 @@ app:
 - Собирает ссылки на страницы роликов.
 - Для каждой ссылки извлекает транскрипт и сохраняет в `outputDir`.
 
-### `list`
+### `parser-list`
 - Обходит все страницы из `listPageUrls`.
 - Собирает все ссылки, удаляет дубликаты.
 - Извлекает транскрипт по каждой ссылке.
@@ -69,9 +69,10 @@ app:
 - Находит блок пагинации `Страницы:` и добавляет остальные URL страниц.
 - Сохраняет список в `out-list/listPageUrls.yaml` в формате:
 ```yaml
-listPageUrls:
-  - "https://oper.ru/video/list.php?div=557"
-  - "https://oper.ru/video/list.php?div=557&page=1"
+app:
+  listPageUrls:
+    - "https://oper.ru/video/list.php?div=557"
+    - "https://oper.ru/video/list.php?div=557&page=1"
 ```
 
 ## Интерфейс
