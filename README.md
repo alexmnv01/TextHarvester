@@ -1,5 +1,6 @@
-# TextHarvester
-Готова первая рабочая версия
+# TextHarvester v 0.5.0-SNAPSHOT
+Фиксируем изменения. 
+Код полностью проверен и работает
 
 feature-parse-list
 
