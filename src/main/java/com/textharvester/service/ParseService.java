@@ -18,7 +18,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.net.URI;
@@ -45,7 +44,6 @@ public class ParseService {
     private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
     private static final Pattern TITLE_WITH_DATE_PATTERN = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{2,4}\\.\\s+.+");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-    private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<String> BLOCK_TAGS = Set.of("p", "div", "li", "blockquote", "pre");
 
     public void runSingle(AppConfig.AppSettings settings) {
@@ -490,7 +488,7 @@ public class ParseService {
         try {
             Path outDir = Path.of(SITE_LIST_DIR);
             Files.createDirectories(outDir);
-            String fileName = PARSER_LIST_ERROR_PREFIX + LocalDate.now().format(DATE_ONLY) + ".yaml";
+            String fileName = PARSER_LIST_ERROR_PREFIX + LocalDateTime.now().format(FILE_TS) + ".yaml";
             Path outPath = outDir.resolve(fileName);
             Files.writeString(outPath, toListPageErrorUrlsYaml(errorUrls), StandardCharsets.UTF_8);
             AppLogger.info("Saved parser-list errors: " + outPath + " (" + errorUrls.size() + " urls)");
