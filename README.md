@@ -31,6 +31,7 @@ app:
     - single
     - parser-list
     - build-site-list
+    - edit-single-page
   defaultMode: single
   singlePageUrl: "https://oper.ru/video/"
   listPageUrls:
@@ -76,9 +77,18 @@ app:
     - "https://oper.ru/video/list.php?div=557&page=1"
 ```
 
+### `edit-single-page`
+- Сервисный режим для редактирования `singlePageUrl` прямо в UI.
+- Кнопка `Edit` активна только в этом режиме.
+- Кнопка `Save config` активна только в этом режиме и сохраняет изменения в `config.yaml`.
+- После изменения URL сразу отображается в списке `Pages` и используется режимами `single` и `build-site-list`.
+- Разрешены только корректные URL с префиксом `http://` или `https://`.
+
 ## Интерфейс
 - Выбор режима из `modes` (берется из `config.yaml`).
 - Список страниц (из `listPageUrls`).
+- Кнопка `Edit` для изменения `singlePageUrl` (доступна только в режиме `edit-single-page`).
+- Кнопка `Save config` для сохранения обновленного `singlePageUrl` в `config.yaml` (доступна только в режиме `edit-single-page`).
 - Кнопки `Start` и `Stop`.
 - Статус выполнения, текущий URL, счетчики `Processed / Saved`.
 - Лог‑панель внизу для всех событий.

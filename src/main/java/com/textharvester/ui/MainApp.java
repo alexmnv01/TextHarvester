@@ -16,12 +16,19 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MainApp extends Application {
+    private static final String MODE_SINGLE = "single";
+    private static final String MODE_PARSER_LIST = "parser-list";
+    private static final String MODE_BUILD_SITE_LIST = "build-site-list";
+    private static final String MODE_EDIT_SINGLE_PAGE = "edit-single-page";
+
     private final ParseService parseService = new ParseService();
     private Task<Void> currentTask;
 
@@ -35,12 +42,12 @@ public class MainApp extends Application {
         modeBox.setValue(config.getApp().getDefaultMode());
 
         ListView<String> pagesList = new ListView<>();
-        modeBox.valueProperty().addListener((obs, oldMode, newMode) -> updatePagesList(pagesList, config, newMode));
-        updatePagesList(pagesList, config, modeBox.getValue());
         pagesList.setPrefHeight(140);
 
         Button startButton = new Button("Start");
         Button stopButton = new Button("Stop");
+        Button editButton = new Button("Edit");
+        Button saveConfigButton = new Button("Save config");
         stopButton.setDisable(true);
 
         Label statusLabel = new Label("Idle");
@@ -61,13 +68,19 @@ public class MainApp extends Application {
         AtomicInteger listItemsCount = new AtomicInteger(0);
         AtomicReference<String> currentUrl = new AtomicReference<>("");
 
+        modeBox.valueProperty().addListener((obs, oldMode, newMode) -> {
+            updatePagesList(pagesList, config, newMode);
+            updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, currentTask != null && currentTask.isRunning());
+        });
+        updatePagesList(pagesList, config, modeBox.getValue());
+        updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+
         AppLogger.setUiSink(line -> Platform.runLater(() -> {
             logArea.appendText(line + System.lineSeparator());
             countLabel.setText("Processed: " + processed.get() + " | Saved: " + saved.get());
             String url = currentUrl.get();
             currentLabel.setText(url == null || url.isBlank() ? "Current: -" : "Current: " + url);
         }));
-
 
         AppLogger.setStatusSupplier(() -> {
             String url = currentUrl.get();
@@ -77,6 +90,44 @@ public class MainApp extends Application {
             return url;
         });
 
+        editButton.setOnAction(evt -> {
+            if (!isEditSinglePageMode(modeBox.getValue())) {
+                return;
+            }
+            TextInputDialog dialog = new TextInputDialog(config.getApp().getSinglePageUrl());
+            dialog.initOwner(stage);
+            dialog.setTitle("Edit URL");
+            dialog.setHeaderText("Edit single page URL");
+            dialog.setContentText("URL:");
+
+            dialog.showAndWait().ifPresent(newUrl -> {
+                String trimmed = newUrl == null ? "" : newUrl.trim();
+                if (trimmed.isBlank()) {
+                    AppLogger.warn("singlePageUrl cannot be empty");
+                    return;
+                }
+                if (!isValidHttpUrl(trimmed)) {
+                    AppLogger.warn("singlePageUrl must be a valid http/https URL");
+                    return;
+                }
+                config.getApp().setSinglePageUrl(trimmed);
+                updatePagesList(pagesList, config, modeBox.getValue());
+                AppLogger.info("singlePageUrl updated: " + trimmed);
+            });
+        });
+
+        saveConfigButton.setOnAction(evt -> {
+            if (!isEditSinglePageMode(modeBox.getValue())) {
+                return;
+            }
+            try {
+                loader.save(config);
+                AppLogger.info("Config saved to config.yaml");
+            } catch (Exception ex) {
+                AppLogger.warn("Failed to save config: " + ex.getMessage());
+            }
+        });
+
         startButton.setOnAction(evt -> {
             String mode = modeBox.getValue();
             AppLogger.info("Selected mode: " + mode);
@@ -84,11 +135,15 @@ public class MainApp extends Application {
                 AppLogger.warn("Mode not selected");
                 return;
             }
+            if (isEditSinglePageMode(mode)) {
+                AppLogger.info("Mode 'edit-single-page' is for URL editing only");
+                return;
+            }
             if (currentTask != null && currentTask.isRunning()) {
                 AppLogger.warn("Task already running");
                 return;
             }
-            if (mode.equals("single") || mode.equals("build-site-list")) {
+            if (MODE_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode)) {
                 if (config.getApp().getSinglePageUrl() == null || config.getApp().getSinglePageUrl().isBlank()) {
                     AppLogger.warn("singlePageUrl is empty in config");
                     return;
@@ -108,6 +163,9 @@ public class MainApp extends Application {
             currentUrl.set("");
             startButton.setDisable(true);
             stopButton.setDisable(false);
+            editButton.setDisable(true);
+            saveConfigButton.setDisable(true);
+            modeBox.setDisable(true);
             progress.setVisible(true);
             statusLabel.setText("Running: " + mode);
             countLabel.setText("Processed: 0 | Saved: 0");
@@ -117,9 +175,9 @@ public class MainApp extends Application {
                 @Override
                 protected Void call() {
                     switch (mode) {
-                        case "single" -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
-                        case "parser-list" -> parseService.runParserList(config.getApp(), cancelled::get, processed, saved, currentUrl);
-                        case "build-site-list" -> parseService.buildSiteList(config.getApp(), cancelled::get, listItemsCount);
+                        case MODE_SINGLE -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
+                        case MODE_PARSER_LIST -> parseService.runParserList(config.getApp(), cancelled::get, processed, saved, currentUrl);
+                        case MODE_BUILD_SITE_LIST -> parseService.buildSiteList(config.getApp(), cancelled::get, listItemsCount);
                         default -> AppLogger.warn("Unknown mode: " + mode);
                     }
                     return null;
@@ -128,7 +186,9 @@ public class MainApp extends Application {
 
             currentTask.setOnSucceeded(e -> {
                 finishTask(statusLabel, progress, startButton, stopButton, "Finished");
-                if (mode.equals("build-site-list")) {
+                modeBox.setDisable(false);
+                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+                if (MODE_BUILD_SITE_LIST.equals(mode)) {
                     AppLogger.info("Процесс формирования списка завершен");
                     AppLogger.info("Был создан список из " + listItemsCount.get() + "-элементов");
                 } else {
@@ -136,8 +196,16 @@ public class MainApp extends Application {
                     AppLogger.info("Было создано файлов: " + saved.get());
                 }
             });
-            currentTask.setOnFailed(e -> finishTask(statusLabel, progress, startButton, stopButton, "Failed"));
-            currentTask.setOnCancelled(e -> finishTask(statusLabel, progress, startButton, stopButton, "Cancelled"));
+            currentTask.setOnFailed(e -> {
+                finishTask(statusLabel, progress, startButton, stopButton, "Failed");
+                modeBox.setDisable(false);
+                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+            });
+            currentTask.setOnCancelled(e -> {
+                finishTask(statusLabel, progress, startButton, stopButton, "Cancelled");
+                modeBox.setDisable(false);
+                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+            });
 
             new Thread(currentTask, "parser-worker").start();
         });
@@ -150,12 +218,15 @@ public class MainApp extends Application {
             AppLogger.warn("Stop requested by user");
         });
 
+        HBox pagesRow = new HBox(10, pagesList, editButton, saveConfigButton);
+        HBox.setHgrow(pagesList, Priority.ALWAYS);
+
         HBox controls = new HBox(10, startButton, stopButton, progress, statusLabel);
         VBox statusBox = new VBox(6, currentLabel, countLabel);
 
         VBox topBox = new VBox(10,
                 labeledRow("Mode:", modeBox),
-                labeledRow("Pages:", pagesList),
+                labeledRow("Pages:", pagesRow),
                 controls,
                 statusBox
         );
@@ -183,11 +254,11 @@ public class MainApp extends Application {
         });
     }
 
-    private HBox labeledRow(String label, Control control) {
+    private HBox labeledRow(String label, javafx.scene.Node node) {
         Label l = new Label(label);
         l.setMinWidth(80);
-        HBox box = new HBox(10, l, control);
-        HBox.setHgrow(control, Priority.ALWAYS);
+        HBox box = new HBox(10, l, node);
+        HBox.setHgrow(node, Priority.ALWAYS);
         return box;
     }
 
@@ -197,7 +268,7 @@ public class MainApp extends Application {
             return;
         }
 
-        if (mode.equals("single") || mode.equals("build-site-list")) {
+        if (MODE_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode) || MODE_EDIT_SINGLE_PAGE.equals(mode)) {
             String singlePageUrl = config.getApp().getSinglePageUrl();
             if (singlePageUrl != null && !singlePageUrl.isBlank()) {
                 pagesList.getItems().add(singlePageUrl);
@@ -210,7 +281,31 @@ public class MainApp extends Application {
         }
     }
 
+    private void updateModeControls(String mode, Button startButton, Button editButton, Button saveConfigButton, boolean isRunning) {
+        boolean editMode = isEditSinglePageMode(mode);
+        startButton.setDisable(isRunning || editMode);
+        editButton.setDisable(isRunning || !editMode);
+        saveConfigButton.setDisable(isRunning || !editMode);
+    }
+
     private boolean isParserListMode(String mode) {
-        return "parser-list".equals(mode);
+        return MODE_PARSER_LIST.equals(mode);
+    }
+
+    private boolean isEditSinglePageMode(String mode) {
+        return MODE_EDIT_SINGLE_PAGE.equals(mode);
+    }
+
+    private boolean isValidHttpUrl(String value) {
+        try {
+            URI uri = new URI(value);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && host != null
+                    && !host.isBlank();
+        } catch (URISyntaxException ignored) {
+            return false;
+        }
     }
 }
