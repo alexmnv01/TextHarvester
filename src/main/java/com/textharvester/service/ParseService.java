@@ -69,7 +69,17 @@ public class ParseService {
             List<LinkItem> links = collectLinksFromListPage(pageUrl, settings);
             AppLogger.info("Collected links: " + links.size());
             if (!isCancelled.getAsBoolean()) {
-                processLinks(settings.getOutputDir(), links, isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
+                List<String> errorUrls = processLinks(
+                        settings.getOutputDir(),
+                        links,
+                        isCancelled,
+                        processed,
+                        saved,
+                        currentUrl,
+                        settings.getMaxItems(),
+                        settings
+                );
+                writeParserListErrorUrls(errorUrls);
             }
         } catch (IOException e) {
             AppLogger.error("Failed to load list page: " + pageUrl, e);
