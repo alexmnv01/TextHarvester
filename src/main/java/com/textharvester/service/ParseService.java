@@ -18,11 +18,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -37,11 +39,13 @@ public class ParseService {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(15);
     private static final String SITE_LIST_DIR = "out-list";
     private static final String SITE_LIST_FILE = "listPageUrls.yaml";
+    private static final String PARSER_LIST_ERROR_PREFIX = "parser-list-error-";
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
     private static final Pattern TITLE_WITH_DATE_PATTERN = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{2,4}\\.\\s+.+");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<String> BLOCK_TAGS = Set.of("p", "div", "li", "blockquote", "pre");
 
     public void runSingle(AppConfig.AppSettings settings) {
@@ -113,7 +117,17 @@ public class ParseService {
         }
 
         AppLogger.info("Total unique links: " + unique.size());
-        processLinks(settings.getOutputDir(), new ArrayList<>(unique.values()), isCancelled, processed, saved, currentUrl, settings.getMaxItems(), settings);
+        List<String> errorUrls = processLinks(
+                settings.getOutputDir(),
+                new ArrayList<>(unique.values()),
+                isCancelled,
+                processed,
+                saved,
+                currentUrl,
+                settings.getMaxItems(),
+                settings
+        );
+        writeParserListErrorUrls(errorUrls);
     }
 
     public void runParserList(AppConfig.AppSettings settings) {
@@ -401,19 +415,20 @@ public class ParseService {
         return String.join(System.lineSeparator(), lines).trim();
     }
 
-    private void processLinks(String outputDir, List<LinkItem> links) {
-        processLinks(outputDir, links, () -> false);
+    private List<String> processLinks(String outputDir, List<LinkItem> links) {
+        return processLinks(outputDir, links, () -> false);
     }
 
-    private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
-        processLinks(outputDir, links, isCancelled, null, null, null, 0, null);
+    private List<String> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
+        return processLinks(outputDir, links, isCancelled, null, null, null, 0, null);
     }
 
-    private void processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
-                              AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems, AppConfig.AppSettings settings) {
+    private List<String> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
+                                      AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems, AppConfig.AppSettings settings) {
         int limit = Math.max(0, maxItems);
         int processedLocal = 0;
         boolean dryRun = settings != null && settings.isDryRun();
+        LinkedHashSet<String> listPageErrorUrls = new LinkedHashSet<>();
         for (LinkItem item : links) {
             if (isCancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                 AppLogger.warn("Processing cancelled");
@@ -432,6 +447,7 @@ public class ParseService {
                 if (transcript == null || transcript.isBlank()) {
                     AppLogger.warn("На данной странице текстовая версия ролика не обнаружена: "
                             + item.getTitle() + " -> " + item.getUrl());
+                    listPageErrorUrls.add(item.getUrl());
                     processedLocal++;
                     continue;
                 }
@@ -453,6 +469,32 @@ public class ParseService {
                 processedLocal++;
             }
         }
+        return new ArrayList<>(listPageErrorUrls);
+    }
+
+    private void writeParserListErrorUrls(List<String> errorUrls) {
+        if (errorUrls == null || errorUrls.isEmpty()) {
+            AppLogger.info("Parser-list errors file is not created: no missing transcript URLs");
+            return;
+        }
+        try {
+            Path outDir = Path.of(SITE_LIST_DIR);
+            Files.createDirectories(outDir);
+            String fileName = PARSER_LIST_ERROR_PREFIX + LocalDate.now().format(DATE_ONLY) + ".yaml";
+            Path outPath = outDir.resolve(fileName);
+            Files.writeString(outPath, toListPageErrorUrlsYaml(errorUrls), StandardCharsets.UTF_8);
+            AppLogger.info("Saved parser-list errors: " + outPath + " (" + errorUrls.size() + " urls)");
+        } catch (IOException e) {
+            AppLogger.error("Failed to save parser-list errors file", e);
+        }
+    }
+
+    private String toListPageErrorUrlsYaml(List<String> errorUrls) {
+        StringBuilder yaml = new StringBuilder("app:\n  listPageErrorUrls:\n");
+        for (String url : errorUrls) {
+            yaml.append("    - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
+        }
+        return yaml.toString();
     }
 
     private boolean isMetaLine(String text) {
