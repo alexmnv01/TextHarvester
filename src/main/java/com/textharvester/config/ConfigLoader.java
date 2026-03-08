@@ -5,6 +5,8 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -53,7 +55,11 @@ public class ConfigLoader {
         options.setPrettyFlow(true);
         options.setIndent(2);
 
-        Yaml yaml = new Yaml(options);
+        Representer representer = new Representer(options);
+        representer.addClassTag(AppConfig.class, Tag.MAP);
+        representer.addClassTag(AppConfig.AppSettings.class, Tag.MAP);
+
+        Yaml yaml = new Yaml(representer, options);
         try (BufferedWriter writer = Files.newBufferedWriter(
                 target,
                 StandardOpenOption.CREATE,

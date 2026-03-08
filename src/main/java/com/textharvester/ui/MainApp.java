@@ -95,6 +95,8 @@ public class MainApp extends Application {
                 return;
             }
             TextInputDialog dialog = new TextInputDialog(config.getApp().getSinglePageUrl());
+            dialog.getDialogPane().setPrefWidth(840);
+            dialog.getEditor().setPrefColumnCount(90);
             dialog.initOwner(stage);
             dialog.setTitle("Edit URL");
             dialog.setHeaderText("Edit single page URL");
