@@ -42,7 +42,7 @@ public class ParseService {
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
-    private static final Pattern TITLE_WITH_DATE_PATTERN = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{2,4}\\.\\s+.+");
+    private static final Pattern TITLE_WITH_DATE_PATTERN = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{2}\\.\\s+.+");
     private static final DateTimeFormatter FILE_TS = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final Set<String> BLOCK_TAGS = Set.of("p", "div", "li", "blockquote", "pre");
 
@@ -694,9 +694,27 @@ public class ParseService {
     private String findFirstDate(String text) {
         var matcher = LIST_DATE_PATTERN.matcher(text);
         if (matcher.find()) {
-            return matcher.group();
+            return toSortableDate(matcher.group());
         }
         return null;
+    }
+
+    private String toSortableDate(String rawDate) {
+        String[] parts = rawDate.split("\\.");
+        if (parts.length != 3) {
+            return rawDate;
+        }
+
+        String day = parts[0];
+        String month = parts[1];
+        String year = parts[2];
+        if (year.length() == 4) {
+            year = year.substring(2);
+        }
+        if (day.length() != 2 || month.length() != 2 || year.length() != 2) {
+            return rawDate;
+        }
+        return year + "." + month + "." + day;
     }
 
     private boolean titleHasDatePrefix(String title) {
