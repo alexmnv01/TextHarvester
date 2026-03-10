@@ -67,7 +67,7 @@ public class ParseService {
             List<LinkItem> links = collectLinksFromListPage(pageUrl, settings);
             AppLogger.info("Collected links: " + links.size());
             if (!isCancelled.getAsBoolean()) {
-                List<String> errorUrls = processLinks(
+                List<ErrorEntry> errorUrls = processLinks(
                         settings.getOutputDir(),
                         links,
                         isCancelled,
@@ -125,7 +125,7 @@ public class ParseService {
         }
 
         AppLogger.info("Total unique links: " + unique.size());
-        List<String> errorUrls = processLinks(
+        List<ErrorEntry> errorUrls = processLinks(
                 settings.getOutputDir(),
                 new ArrayList<>(unique.values()),
                 isCancelled,
@@ -310,10 +310,18 @@ public class ParseService {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private String extractTranscript(String pageUrl, AppConfig.AppSettings settings) throws IOException {
+    private ParseResult extractParseResult(String pageUrl, AppConfig.AppSettings settings) throws IOException {
         AppLogger.info("Extracting transcript from: " + pageUrl);
         Document doc = connect(pageUrl, settings);
+        boolean hasTranscriptLink = hasTranscriptLink(doc);
+        if (!hasTranscriptLink) {
+            AppLogger.warn("Ссылка на текстовую версию не найдена на странице: " + pageUrl);
+        }
+        String transcript = extractTranscript(doc, pageUrl);
+        return new ParseResult(transcript, hasTranscriptLink);
+    }
 
+    private String extractTranscript(Document doc, String pageUrl) {
         Element h1 = doc.selectFirst("h1");
         if (h1 == null) {
             AppLogger.warn("No h1 found on page: " + pageUrl);
@@ -423,20 +431,20 @@ public class ParseService {
         return String.join(System.lineSeparator(), lines).trim();
     }
 
-    private List<String> processLinks(String outputDir, List<LinkItem> links) {
+    private List<ErrorEntry> processLinks(String outputDir, List<LinkItem> links) {
         return processLinks(outputDir, links, () -> false);
     }
 
-    private List<String> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
+    private List<ErrorEntry> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled) {
         return processLinks(outputDir, links, isCancelled, null, null, null, 0, null);
     }
 
-    private List<String> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
+    private List<ErrorEntry> processLinks(String outputDir, List<LinkItem> links, BooleanSupplier isCancelled,
                                       AtomicInteger processed, AtomicInteger saved, AtomicReference<String> currentUrl, int maxItems, AppConfig.AppSettings settings) {
         int limit = Math.max(0, maxItems);
         int processedLocal = 0;
         boolean dryRun = settings != null && settings.isDryRun();
-        LinkedHashSet<String> listPageErrorUrls = new LinkedHashSet<>();
+        LinkedHashMap<String, ErrorEntry> listPageErrorUrls = new LinkedHashMap<>();
         for (LinkItem item : links) {
             if (isCancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) {
                 AppLogger.warn("Processing cancelled");
@@ -451,11 +459,26 @@ public class ParseService {
             }
             AppLogger.info("Processing: " + item.getTitle() + " -> " + item.getUrl());
             try {
-                String transcript = extractTranscript(item.getUrl(), settings);
+                ParseResult result = extractParseResult(item.getUrl(), settings);
+                String transcript = result.transcript();
+                boolean mainAlgorithmFoundTranscript = transcript != null && !transcript.isBlank();
+                boolean transcriptLinkFound = result.hasTranscriptLink();
+                if (!transcriptLinkFound) {
+                    String note = mainAlgorithmFoundTranscript
+                            ? "Расхождение: основной алгоритм распознал наличие текста, но ссылка на текстовую версию не найдена"
+                            : null;
+                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getUrl(), note));
+                }
                 if (transcript == null || transcript.isBlank()) {
                     AppLogger.warn("На данной странице текстовая версия ролика не обнаружена: "
                             + item.getTitle() + " -> " + item.getUrl());
-                    listPageErrorUrls.add(item.getUrl());
+                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getUrl(), null));
+                    processedLocal++;
+                    continue;
+                }
+                if (!transcriptLinkFound) {
+                    AppLogger.warn("Текст найден основным алгоритмом, но файл не будет создан без ссылки на текстовую версию: "
+                            + item.getTitle() + " -> " + item.getUrl());
                     processedLocal++;
                     continue;
                 }
@@ -477,10 +500,10 @@ public class ParseService {
                 processedLocal++;
             }
         }
-        return new ArrayList<>(listPageErrorUrls);
+        return new ArrayList<>(listPageErrorUrls.values());
     }
 
-    private void writeParserListErrorUrls(List<String> errorUrls) {
+    private void writeParserListErrorUrls(List<ErrorEntry> errorUrls) {
         if (errorUrls == null || errorUrls.isEmpty()) {
             AppLogger.info("Parser-list errors file is not created: no missing transcript URLs");
             return;
@@ -497,12 +520,25 @@ public class ParseService {
         }
     }
 
-    private String toListPageErrorUrlsYaml(List<String> errorUrls) {
+    private String toListPageErrorUrlsYaml(List<ErrorEntry> errorUrls) {
         StringBuilder yaml = new StringBuilder("app:\n  listPageErrorUrls:\n");
-        for (String url : errorUrls) {
-            yaml.append("    - \"").append(escapeYamlDoubleQuoted(url)).append("\"\n");
+        for (ErrorEntry errorUrl : errorUrls) {
+            yaml.append("    - url: \"").append(escapeYamlDoubleQuoted(errorUrl.url())).append("\"\n");
+            if (errorUrl.note() != null && !errorUrl.note().isBlank()) {
+                yaml.append("      note: \"").append(escapeYamlDoubleQuoted(errorUrl.note())).append("\"\n");
+            }
         }
         return yaml.toString();
+    }
+
+    private boolean hasTranscriptLink(Document doc) {
+        for (Element link : doc.select("a[href*=/video/view.php?t=]")) {
+            String text = normalize(link.text()).toLowerCase();
+            if ("текст".equals(text) || text.contains("текст")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isMetaLine(String text) {
@@ -838,5 +874,11 @@ public class ParseService {
         boolean hasLink() {
             return hasLink;
         }
+    }
+
+    private record ParseResult(String transcript, boolean hasTranscriptLink) {
+    }
+
+    private record ErrorEntry(String url, String note) {
     }
 }
