@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 public class ParseService {
     private static final String DEFAULT_USER_AGENT = "TextHarvesterBot/0.1 (+https://github.com/alexmnv01/TextHarvester)";
@@ -39,6 +40,7 @@ public class ParseService {
     private static final String SITE_LIST_DIR = "out-list";
     private static final String SITE_LIST_FILE = "listPageUrls.yaml";
     private static final String PARSER_LIST_ERROR_PREFIX = "parser-list-error-";
+    private static final String ERROR_LIST_DIR = "out-error-list";
     private static final Pattern REPLY_PATTERN = Pattern.compile("^[\\p{L}0-9 .-]{2,60}\\.\\s+.+");
     private static final Pattern TIME_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}:\\d{2}\\b");
     private static final Pattern LIST_DATE_PATTERN = Pattern.compile("\\b\\d{2}\\.\\d{2}\\.\\d{2,4}\\b");
@@ -467,12 +469,12 @@ public class ParseService {
                     String note = mainAlgorithmFoundTranscript
                             ? "Расхождение: основной алгоритм распознал наличие текста, но ссылка на текстовую версию не найдена"
                             : null;
-                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getUrl(), note));
+                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getTitle(), item.getUrl(), note));
                 }
                 if (transcript == null || transcript.isBlank()) {
                     AppLogger.warn("На данной странице текстовая версия ролика не обнаружена: "
                             + item.getTitle() + " -> " + item.getUrl());
-                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getUrl(), null));
+                    listPageErrorUrls.putIfAbsent(item.getUrl(), new ErrorEntry(item.getTitle(), item.getUrl(), null));
                     processedLocal++;
                     continue;
                 }
@@ -505,6 +507,7 @@ public class ParseService {
 
     private void writeParserListErrorUrls(List<ErrorEntry> errorUrls) {
         if (errorUrls == null || errorUrls.isEmpty()) {
+            clearErrorListDirQuietly();
             AppLogger.info("Parser-list errors file is not created: no missing transcript URLs");
             return;
         }
@@ -514,9 +517,20 @@ public class ParseService {
             String fileName = PARSER_LIST_ERROR_PREFIX + LocalDateTime.now().format(FILE_TS) + ".yaml";
             Path outPath = outDir.resolve(fileName);
             Files.writeString(outPath, toListPageErrorUrlsYaml(errorUrls), StandardCharsets.UTF_8);
+            writeErrorUrlFiles(errorUrls);
             AppLogger.info("Saved parser-list errors: " + outPath + " (" + errorUrls.size() + " urls)");
         } catch (IOException e) {
             AppLogger.error("Failed to save parser-list errors file", e);
+        }
+    }
+
+    private void clearErrorListDirQuietly() {
+        try {
+            Path outDir = Path.of(ERROR_LIST_DIR);
+            Files.createDirectories(outDir);
+            clearErrorListDir(outDir);
+        } catch (IOException e) {
+            AppLogger.error("Failed to clear error URL files directory", e);
         }
     }
 
@@ -529,6 +543,42 @@ public class ParseService {
             }
         }
         return yaml.toString();
+    }
+
+    private void writeErrorUrlFiles(List<ErrorEntry> errorUrls) throws IOException {
+        Path outDir = Path.of(ERROR_LIST_DIR);
+        Files.createDirectories(outDir);
+        clearErrorListDir(outDir);
+
+        Map<String, Integer> usedNames = new LinkedHashMap<>();
+        for (ErrorEntry errorEntry : errorUrls) {
+            String fileBaseName = buildUniqueFileBaseName(errorEntry.title(), usedNames);
+            Path outPath = outDir.resolve(fileBaseName + ".txt");
+            Files.writeString(outPath, errorEntry.url(), StandardCharsets.UTF_8);
+        }
+
+        AppLogger.info("Saved error URL files: " + outDir + " (" + errorUrls.size() + " files)");
+    }
+
+    private void clearErrorListDir(Path outDir) throws IOException {
+        try (Stream<Path> stream = Files.list(outDir)) {
+            for (Path path : stream.toList()) {
+                if (Files.isRegularFile(path)) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
+    private String buildUniqueFileBaseName(String title, Map<String, Integer> usedNames) {
+        String safeTitle = sanitizeFileName(title);
+        if (safeTitle.isBlank()) {
+            safeTitle = "untitled";
+        }
+
+        int count = usedNames.getOrDefault(safeTitle, 0);
+        usedNames.put(safeTitle, count + 1);
+        return count == 0 ? safeTitle : safeTitle + "_" + (count + 1);
     }
 
     private boolean hasTranscriptLink(Document doc) {
@@ -879,6 +929,6 @@ public class ParseService {
     private record ParseResult(String transcript, boolean hasTranscriptLink) {
     }
 
-    private record ErrorEntry(String url, String note) {
+    private record ErrorEntry(String title, String url, String note) {
     }
 }
