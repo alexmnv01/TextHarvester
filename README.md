@@ -2,11 +2,9 @@
 Фиксируем изменения. 
 Код полностью проверен и работает
 
-feature-add-edit
-feature-add-list-error
-feature-change-data-out
 feature-add-tex-validation
 feature-out-error-list
+feature-add-descriptions
 
 JavaFX‑приложение для парсинга текстовых транскриптов роликов с сайта `oper.ru` и сохранения их в файлы `nameFile.txt`.
 
