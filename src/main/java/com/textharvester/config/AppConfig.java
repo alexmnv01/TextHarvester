@@ -10,7 +10,7 @@ public class AppConfig {
 
     @Data
     public static class AppSettings {
-        private List<String> modes;
+        private List<ModeOption> modes;
         private String defaultMode;
         private String singlePageUrl;
         private List<String> listPageUrls;
@@ -19,5 +19,11 @@ public class AppConfig {
         private String userAgent;
         private int timeoutSeconds;
         private boolean dryRun;
+    }
+
+    @Data
+    public static class ModeOption {
+        private String name;
+        private String description;
     }
 }

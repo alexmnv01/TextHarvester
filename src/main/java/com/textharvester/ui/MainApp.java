@@ -19,12 +19,13 @@ import javafx.stage.Stage;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MainApp extends Application {
-    private static final String MODE_SINGLE = "single";
+    private static final String MODE_PARSER_SINGLE = "parser-single";
     private static final String MODE_PARSER_LIST = "parser-list";
     private static final String MODE_BUILD_SITE_LIST = "build-site-list";
     private static final String MODE_EDIT_SINGLE_PAGE = "edit-single-page";
@@ -37,9 +38,23 @@ public class MainApp extends Application {
         ConfigLoader loader = new ConfigLoader(Path.of("config.yaml"));
         AppConfig config = loader.load();
 
-        ComboBox<String> modeBox = new ComboBox<>();
+        ComboBox<AppConfig.ModeOption> modeBox = new ComboBox<>();
         modeBox.getItems().addAll(config.getApp().getModes());
-        modeBox.setValue(config.getApp().getDefaultMode());
+        modeBox.setCellFactory(listView -> new ListCell<>() {
+            @Override
+            protected void updateItem(AppConfig.ModeOption item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : formatModeLabel(item));
+            }
+        });
+        modeBox.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(AppConfig.ModeOption item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : formatModeLabel(item));
+            }
+        });
+        findModeOption(config, config.getApp().getDefaultMode()).ifPresent(modeBox::setValue);
 
         ListView<String> pagesList = new ListView<>();
         pagesList.setPrefHeight(140);
@@ -69,11 +84,12 @@ public class MainApp extends Application {
         AtomicReference<String> currentUrl = new AtomicReference<>("");
 
         modeBox.valueProperty().addListener((obs, oldMode, newMode) -> {
-            updatePagesList(pagesList, config, newMode);
-            updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, currentTask != null && currentTask.isRunning());
+            String selectedMode = getModeName(newMode);
+            updatePagesList(pagesList, config, selectedMode);
+            updateModeControls(selectedMode, startButton, editButton, saveConfigButton, currentTask != null && currentTask.isRunning());
         });
-        updatePagesList(pagesList, config, modeBox.getValue());
-        updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+        updatePagesList(pagesList, config, getSelectedMode(modeBox));
+        updateModeControls(getSelectedMode(modeBox), startButton, editButton, saveConfigButton, false);
 
         AppLogger.setUiSink(line -> Platform.runLater(() -> {
             logArea.appendText(line + System.lineSeparator());
@@ -91,7 +107,7 @@ public class MainApp extends Application {
         });
 
         editButton.setOnAction(evt -> {
-            if (!isEditSinglePageMode(modeBox.getValue())) {
+            if (!isEditSinglePageMode(getSelectedMode(modeBox))) {
                 return;
             }
             TextInputDialog dialog = new TextInputDialog(config.getApp().getSinglePageUrl());
@@ -113,13 +129,13 @@ public class MainApp extends Application {
                     return;
                 }
                 config.getApp().setSinglePageUrl(trimmed);
-                updatePagesList(pagesList, config, modeBox.getValue());
+                updatePagesList(pagesList, config, getSelectedMode(modeBox));
                 AppLogger.info("singlePageUrl updated: " + trimmed);
             });
         });
 
         saveConfigButton.setOnAction(evt -> {
-            if (!isEditSinglePageMode(modeBox.getValue())) {
+            if (!isEditSinglePageMode(getSelectedMode(modeBox))) {
                 return;
             }
             try {
@@ -131,7 +147,7 @@ public class MainApp extends Application {
         });
 
         startButton.setOnAction(evt -> {
-            String mode = modeBox.getValue();
+            String mode = getSelectedMode(modeBox);
             AppLogger.info("Selected mode: " + mode);
             if (mode == null || mode.isBlank()) {
                 AppLogger.warn("Mode not selected");
@@ -145,7 +161,7 @@ public class MainApp extends Application {
                 AppLogger.warn("Task already running");
                 return;
             }
-            if (MODE_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode)) {
+            if (MODE_PARSER_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode)) {
                 if (config.getApp().getSinglePageUrl() == null || config.getApp().getSinglePageUrl().isBlank()) {
                     AppLogger.warn("singlePageUrl is empty in config");
                     return;
@@ -177,7 +193,7 @@ public class MainApp extends Application {
                 @Override
                 protected Void call() {
                     switch (mode) {
-                        case MODE_SINGLE -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
+                        case MODE_PARSER_SINGLE -> parseService.runSingle(config.getApp(), cancelled::get, processed, saved, currentUrl);
                         case MODE_PARSER_LIST -> parseService.runParserList(config.getApp(), cancelled::get, processed, saved, currentUrl);
                         case MODE_BUILD_SITE_LIST -> parseService.buildSiteList(config.getApp(), cancelled::get, listItemsCount);
                         default -> AppLogger.warn("Unknown mode: " + mode);
@@ -189,7 +205,7 @@ public class MainApp extends Application {
             currentTask.setOnSucceeded(e -> {
                 finishTask(statusLabel, progress, startButton, stopButton, "Finished");
                 modeBox.setDisable(false);
-                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+                updateModeControls(getSelectedMode(modeBox), startButton, editButton, saveConfigButton, false);
                 if (MODE_BUILD_SITE_LIST.equals(mode)) {
                     AppLogger.info("Процесс формирования списка завершен");
                     AppLogger.info("Был создан список из " + listItemsCount.get() + "-элементов");
@@ -201,12 +217,12 @@ public class MainApp extends Application {
             currentTask.setOnFailed(e -> {
                 finishTask(statusLabel, progress, startButton, stopButton, "Failed");
                 modeBox.setDisable(false);
-                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+                updateModeControls(getSelectedMode(modeBox), startButton, editButton, saveConfigButton, false);
             });
             currentTask.setOnCancelled(e -> {
                 finishTask(statusLabel, progress, startButton, stopButton, "Cancelled");
                 modeBox.setDisable(false);
-                updateModeControls(modeBox.getValue(), startButton, editButton, saveConfigButton, false);
+                updateModeControls(getSelectedMode(modeBox), startButton, editButton, saveConfigButton, false);
             });
 
             new Thread(currentTask, "parser-worker").start();
@@ -270,7 +286,7 @@ public class MainApp extends Application {
             return;
         }
 
-        if (MODE_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode) || MODE_EDIT_SINGLE_PAGE.equals(mode)) {
+        if (MODE_PARSER_SINGLE.equals(mode) || MODE_BUILD_SITE_LIST.equals(mode) || MODE_EDIT_SINGLE_PAGE.equals(mode)) {
             String singlePageUrl = config.getApp().getSinglePageUrl();
             if (singlePageUrl != null && !singlePageUrl.isBlank()) {
                 pagesList.getItems().add(singlePageUrl);
@@ -296,6 +312,31 @@ public class MainApp extends Application {
 
     private boolean isEditSinglePageMode(String mode) {
         return MODE_EDIT_SINGLE_PAGE.equals(mode);
+    }
+
+    private String getSelectedMode(ComboBox<AppConfig.ModeOption> modeBox) {
+        return getModeName(modeBox.getValue());
+    }
+
+    private String getModeName(AppConfig.ModeOption option) {
+        return option == null ? null : option.getName();
+    }
+
+    private Optional<AppConfig.ModeOption> findModeOption(AppConfig config, String modeName) {
+        if (config.getApp().getModes() == null) {
+            return Optional.empty();
+        }
+        return config.getApp().getModes().stream()
+                .filter(option -> option != null && modeName != null && modeName.equals(option.getName()))
+                .findFirst();
+    }
+
+    private String formatModeLabel(AppConfig.ModeOption option) {
+        String description = option.getDescription();
+        if (description == null || description.isBlank()) {
+            return option.getName();
+        }
+        return option.getName() + " - " + description;
     }
 
     private boolean isValidHttpUrl(String value) {

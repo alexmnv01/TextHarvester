@@ -31,11 +31,15 @@ mvn javafx:run
 ```yaml
 app:
   modes:
-    - single
-    - parser-list
-    - build-site-list
-    - edit-single-page
-  defaultMode: single
+    - name: parser-single
+      description: "Парсинг текстов с одной страницы"
+    - name: parser-list
+      description: "Парсинг текстов со списка страниц"
+    - name: build-site-list
+      description: "Создание списка страниц для парсинга"
+    - name: edit-single-page
+      description: "Изменить URL страницы для парсинга"
+  defaultMode: parser-single
   singlePageUrl: "https://oper.ru/video/"
   listPageUrls:
     - "https://oper.ru/video/"
@@ -47,9 +51,9 @@ app:
 ```
 
 ### Описание полей
-- `modes` — список режимов, которые будут отображаться в UI.
+- `modes` — список режимов с именем (`name`) и описанием (`description`), которые отображаются в UI.
 - `defaultMode` — режим по умолчанию при запуске.
-- `singlePageUrl` — страница со списком роликов (для режима `single` и `build-site-list`).
+- `singlePageUrl` — страница со списком роликов (для режимов `parser-single` и `build-site-list`).
 - `listPageUrls` — список страниц со списками роликов (для режима `parser-list`).
 - `outputDir` — каталог для сохранения результатов.
 - `maxItems` — лимит количества роликов для обработки. `0` = без ограничения.
@@ -59,7 +63,7 @@ app:
 
 ## Режимы работы
 
-### `single`
+### `parser-single`
 - Загружает одну страницу (`singlePageUrl`).
 - Собирает ссылки на страницы роликов.
 - Для каждой ссылки извлекает транскрипт и сохраняет в `outputDir`.
@@ -85,7 +89,7 @@ app:
 - Сервисный режим для редактирования `singlePageUrl` прямо в UI.
 - Кнопка `Edit` активна только в этом режиме.
 - Кнопка `Save config` активна только в этом режиме и сохраняет изменения в `config.yaml`.
-- После изменения URL сразу отображается в списке `Pages` и используется режимами `single` и `build-site-list`.
+- После изменения URL сразу отображается в списке `Pages` и используется режимами `parser-single` и `build-site-list`.
 - Разрешены только корректные URL с префиксом `http://` или `https://`.
 
 ## Интерфейс

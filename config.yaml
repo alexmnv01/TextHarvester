@@ -1,10 +1,14 @@
 app:
   modes:
-    - single
-    - parser-list
-    - build-site-list
-    - edit-single-page
-  defaultMode: single
+    - name: parser-single
+      description: "Парсинг текстов с одной страницы"
+    - name: parser-list
+      description: "Парсинг текстов со списка страниц"
+    - name: build-site-list
+      description: "Создание списка страниц для парсинга"
+    - name: edit-single-page
+      description: "Изменить URL страницы для парсинга"
+  defaultMode: parser-single
   singlePageUrl: "https://oper.ru/video/"
   listPageUrls:
     - "https://oper.ru/video/"

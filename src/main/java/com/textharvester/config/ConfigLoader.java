@@ -58,6 +58,7 @@ public class ConfigLoader {
         Representer representer = new Representer(options);
         representer.addClassTag(AppConfig.class, Tag.MAP);
         representer.addClassTag(AppConfig.AppSettings.class, Tag.MAP);
+        representer.addClassTag(AppConfig.ModeOption.class, Tag.MAP);
 
         Yaml yaml = new Yaml(representer, options);
         try (BufferedWriter writer = Files.newBufferedWriter(
