@@ -54,11 +54,10 @@ public class MainApp extends Application {
                 setText(empty || item == null ? null : getModeName(item));
             }
         });
-        TextArea modeDescriptionArea = new TextArea();
-        modeDescriptionArea.setEditable(false);
+        Label modeDescriptionArea = new Label();
         modeDescriptionArea.setWrapText(true);
-        modeDescriptionArea.setPrefRowCount(3);
         modeDescriptionArea.setFocusTraversable(false);
+        modeDescriptionArea.setMaxWidth(Double.MAX_VALUE);
         ListView<String> pagesList = new ListView<>();
         pagesList.setPrefHeight(140);
 
