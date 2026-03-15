@@ -44,18 +44,21 @@ public class MainApp extends Application {
             @Override
             protected void updateItem(AppConfig.ModeOption item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : formatModeLabel(item));
+                setText(empty || item == null ? null : getModeName(item));
             }
         });
         modeBox.setButtonCell(new ListCell<>() {
             @Override
             protected void updateItem(AppConfig.ModeOption item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : formatModeLabel(item));
+                setText(empty || item == null ? null : getModeName(item));
             }
         });
-        findModeOption(config, config.getApp().getDefaultMode()).ifPresent(modeBox::setValue);
-
+        TextArea modeDescriptionArea = new TextArea();
+        modeDescriptionArea.setEditable(false);
+        modeDescriptionArea.setWrapText(true);
+        modeDescriptionArea.setPrefRowCount(3);
+        modeDescriptionArea.setFocusTraversable(false);
         ListView<String> pagesList = new ListView<>();
         pagesList.setPrefHeight(140);
 
@@ -85,9 +88,12 @@ public class MainApp extends Application {
 
         modeBox.valueProperty().addListener((obs, oldMode, newMode) -> {
             String selectedMode = getModeName(newMode);
+            modeDescriptionArea.setText(getModeDescription(newMode));
             updatePagesList(pagesList, config, selectedMode);
             updateModeControls(selectedMode, startButton, editButton, saveConfigButton, currentTask != null && currentTask.isRunning());
         });
+        selectInitialMode(modeBox, config);
+        modeDescriptionArea.setText(getModeDescription(modeBox.getValue()));
         updatePagesList(pagesList, config, getSelectedMode(modeBox));
         updateModeControls(getSelectedMode(modeBox), startButton, editButton, saveConfigButton, false);
 
@@ -242,8 +248,12 @@ public class MainApp extends Application {
         HBox controls = new HBox(10, startButton, stopButton, progress, statusLabel);
         VBox statusBox = new VBox(6, currentLabel, countLabel);
 
+        HBox modeRowContent = new HBox(10, modeBox, modeDescriptionArea);
+        HBox.setHgrow(modeBox, Priority.ALWAYS);
+        HBox.setHgrow(modeDescriptionArea, Priority.ALWAYS);
+
         VBox topBox = new VBox(10,
-                labeledRow("Mode:", modeBox),
+                labeledRow("Mode:", modeRowContent),
                 labeledRow("Pages:", pagesRow),
                 controls,
                 statusBox
@@ -318,6 +328,18 @@ public class MainApp extends Application {
         return getModeName(modeBox.getValue());
     }
 
+    private void selectInitialMode(ComboBox<AppConfig.ModeOption> modeBox, AppConfig config) {
+        findModeOption(config, config.getApp().getDefaultMode())
+                .ifPresentOrElse(
+                        option -> modeBox.getSelectionModel().select(option),
+                        () -> {
+                            if (!modeBox.getItems().isEmpty()) {
+                                modeBox.getSelectionModel().selectFirst();
+                            }
+                        }
+                );
+    }
+
     private String getModeName(AppConfig.ModeOption option) {
         return option == null ? null : option.getName();
     }
@@ -331,12 +353,11 @@ public class MainApp extends Application {
                 .findFirst();
     }
 
-    private String formatModeLabel(AppConfig.ModeOption option) {
-        String description = option.getDescription();
-        if (description == null || description.isBlank()) {
-            return option.getName();
+    private String getModeDescription(AppConfig.ModeOption option) {
+        if (option == null || option.getDescription() == null) {
+            return "";
         }
-        return option.getName() + " - " + description;
+        return option.getDescription();
     }
 
     private boolean isValidHttpUrl(String value) {
